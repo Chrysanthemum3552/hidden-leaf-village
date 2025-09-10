@@ -62,8 +62,12 @@ BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000").rs
 # 실행방법
 
 1. 첫 번째 터미널을 열고 backend_fastapi 디렉터리로 이동한 뒤 다음을 입력
+pip install -r requirements.txt
 python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 2. 새로운 터미널을 하나 더 열고 이번엔 frontend_streamlit 디렉터리로 이동 뒤 다음을 입력
+pip install -r requirements.txt
 python -m streamlit run app.py --server.port 8501
+
+=> pip install -r requirements.txt 이 코드는 최초 한 번만 해도 됩니당
 ```
