@@ -1,0 +1,6 @@
+image_path: C:\Users\dltmd\OneDrive\Desktop\advanced_project\hidden-leaf-village\backend_fastapi\data\uploads\upload_20250910_162226_36130881.jpg
+copy:
+여름은 빙수와 함께! 🍧  
+달콤한 순간, 배스킨라빈스와 MEALTOP의 특별한 만남!
+
+#시원한여름 #빙수천국 #배스킨라빈스
