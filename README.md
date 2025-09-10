@@ -1,19 +1,5 @@
 # hidden-leaf-village
-<p style="font-size:24px;">
-  <span style="color:red;">이</span>
-  <span style="color:orange;">타</span>
-  <span style="color:yellow;">치</span>
-  <span style="color:green;">가</span>
-  <span style="color:blue;">왜</span>
-  <span style="color:indigo;">강</span>
-  <span style="color:purple;">한</span>
-  <span style="color:pink;">지</span>
-  <span style="color:brown;">아</span>
-  <span style="color:teal;">십</span>
-  <span style="color:gray;">니</span>
-  <span style="color:gold;">까</span>
-  <span style="color:black;">?</span>
-</p>
+## 이타치가 왜 강한지 아십니까?
 
 
 ![탈주닌자 이타치](https://i3.ruliweb.com/img/24/12/26/1940304a2c2349a83.webp)
