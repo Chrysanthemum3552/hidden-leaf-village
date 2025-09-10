@@ -1,5 +1,20 @@
 # hidden-leaf-village
-이타치가 왜 강한지 아십니까?
+<p style="font-size:24px;">
+  <span style="color:red;">이</span>
+  <span style="color:orange;">타</span>
+  <span style="color:yellow;">치</span>
+  <span style="color:green;">가</span>
+  <span style="color:blue;">왜</span>
+  <span style="color:indigo;">강</span>
+  <span style="color:purple;">한</span>
+  <span style="color:pink;">지</span>
+  <span style="color:brown;">아</span>
+  <span style="color:teal;">십</span>
+  <span style="color:gray;">니</span>
+  <span style="color:gold;">까</span>
+  <span style="color:black;">?</span>
+</p>
+
 
 ![탈주닌자 이타치](https://i3.ruliweb.com/img/24/12/26/1940304a2c2349a83.webp)
 
@@ -71,3 +86,9 @@ python -m streamlit run app.py --server.port 8501
 
 => pip install -r requirements.txt 이 코드는 최초 한 번만 해도 됩니당
 ```
+
+---
+
+# 4팀의 협업일지 링크
+
+https://www.notion.so/4-269e3ffbb6558064b8b6e24e43f1ac27?source=copy_link
