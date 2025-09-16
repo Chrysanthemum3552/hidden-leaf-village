@@ -1,0 +1,9 @@
+.env
+.venv/
+backend_fastapi/.venv/
+__pycache__/
+*.pyc
+backend_fastapi/data/
+backend_fastapi/data/uploads/
+backend_fastapi/data/outputs/
+backend_fastapi/routes/env
