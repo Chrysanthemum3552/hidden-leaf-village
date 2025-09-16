@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
-ROOT_DIR = Path(__file__).resolve().parents[1]  # .../hidden-leaf-village
+ROOT_DIR = Path(__file__).resolve().parents[2]  # .../hidden-leaf-village
 load_dotenv(dotenv_path=ROOT_DIR / ".env", override=True)
 
 app = FastAPI(
