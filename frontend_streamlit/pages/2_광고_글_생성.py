@@ -18,7 +18,9 @@ if st.button("광고 글 생성"):
             if r.ok:
                 data = r.json()
                 st.success("완료!")
-                st.image(data["uploaded_path"], caption="업로드 원본")
+                # 정적 URL(uploaded_url)을 우선 사용하면 경로 충돌/권한 문제를 피하기에 용이하다고 생각되어 코드 한 줄 수정했습니다.
+                img_src = data.get("uploaded_url") or data.get("uploaded_path")
+                st.image(img_src, caption="업로드 원본")
                 st.subheader("생성된 광고 문구")
                 st.write(data["copy"])
                 st.caption(f"log: {data['log_path']}")
