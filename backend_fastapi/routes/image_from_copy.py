@@ -1,5 +1,4 @@
 import os, uuid, base64
-import re  # 추가: 보안 필터링용
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -26,30 +25,13 @@ STORAGE_ROOT = os.getenv(
 OUTPUT_DIR = os.path.join(STORAGE_ROOT, "outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# 보안 필터링 설정
-BLOCKED_KEYWORDS = {
-    '무시하고', 'ignore', 'instead', '대신에', 'violence', '폭력', 'sexual', '성적', 
-    'explicit', '노출', 'harmful', '유해', 'delete', '삭제', 'hack', '해킹',
-    'nude', '나체', 'drug', '마약', 'weapon', '무기', 'blood', '피'
-}
-
-ALLOWED_STYLES = {
-    "minimal", "modern", "vintage", "elegant", "bold", "artistic", 
-    "professional", "casual", "luxury", "vibrant", "monochrome"
-}
-
 # 에러 메시지 상수 정의
 class ErrorMessages:
     # 400 Bad Request
     TEXT_TOO_LONG = "텍스트 길이가 1000자를 초과합니다."
     TEXT_EMPTY = "유효한 텍스트를 입력해주세요."
-    INVALID_STYLE = "지원하지 않는 스타일입니다."
     INVALID_SEED = "seed 값은 0 이상의 정수여야 합니다."
     MALFORMED_REQUEST = "요청 형식이 올바르지 않습니다."
-    
-    # 403 Forbidden
-    CONTENT_BLOCKED = "부적절한 내용이 포함되어 있습니다."
-    CONTENT_POLICY_VIOLATION = "콘텐츠 정책을 위반하는 내용입니다."
     
     # 429 Too Many Requests
     RATE_LIMIT_EXCEEDED = "요청 횟수 제한을 초과했습니다. 잠시 후 다시 시도해주세요."
@@ -69,40 +51,8 @@ class CopyToImageReq(BaseModel):
     style: Optional[str] = None
     seed: Optional[int] = None
 
-# 보안 필터링 함수들
-def _sanitize_input(text: str) -> str:
-    """기본 입력 정제"""
-    if not text:
-        return ""
-    # 특수문자 제거, 길이 제한
-    sanitized = re.sub(r'[^\w\s가-힣.,!?-]', '', text.strip())
-    return sanitized[:500]
-
-def _check_malicious_content(text: str) -> bool:
-    """악성 키워드 검사"""
-    text_lower = text.lower()
-    return any(keyword in text_lower for keyword in BLOCKED_KEYWORDS)
-
-def _validate_style(style: Optional[str]) -> Optional[str]:
-    """스타일 검증"""
-    if not style:
-        return None
-    clean_style = style.lower().strip()
-    return clean_style if clean_style in ALLOWED_STYLES else None
-
-def _validate_seed(seed: Optional[int]) -> Optional[int]:
-    """seed 값 검증"""
-    if seed is None:
-        return None
-    if not isinstance(seed, int) or seed < 0:
-        raise HTTPException(
-            status_code=400, 
-            detail=ErrorMessages.INVALID_SEED
-        )
-    return seed
-
-def _validate_and_clean_request(req: CopyToImageReq) -> CopyToImageReq:
-    """요청 검증 및 정제"""
+def _validate_request(req: CopyToImageReq) -> CopyToImageReq:
+    """기본 요청 검증"""
     try:
         # 기본 유효성 검사
         if not hasattr(req, 'text') or req.text is None:
@@ -118,38 +68,21 @@ def _validate_and_clean_request(req: CopyToImageReq) -> CopyToImageReq:
                 detail=ErrorMessages.TEXT_TOO_LONG
             )
         
-        # 악성 콘텐츠 체크 (403 Forbidden)
-        if _check_malicious_content(req.text):
-            raise HTTPException(
-                status_code=403, 
-                detail=ErrorMessages.CONTENT_BLOCKED
-            )
-        
-        # 입력 정제
-        clean_text = _sanitize_input(req.text)
-        if not clean_text.strip():
+        # 빈 텍스트 체크
+        if not req.text.strip():
             raise HTTPException(
                 status_code=400, 
                 detail=ErrorMessages.TEXT_EMPTY
             )
         
-        # 스타일 검증
-        validated_style = _validate_style(req.style)
-        if req.style and not validated_style:
+        # seed 검증
+        if req.seed is not None and (not isinstance(req.seed, int) or req.seed < 0):
             raise HTTPException(
-                status_code=400,
-                detail=f"{ErrorMessages.INVALID_STYLE} 지원 스타일: {', '.join(ALLOWED_STYLES)}"
+                status_code=400, 
+                detail=ErrorMessages.INVALID_SEED
             )
         
-        # seed 검증
-        validated_seed = _validate_seed(req.seed)
-        
-        # 정제된 요청 반환
-        return CopyToImageReq(
-            text=clean_text,
-            style=validated_style,
-            seed=validated_seed
-        )
+        return req
         
     except HTTPException:
         raise
@@ -195,11 +128,11 @@ def _handle_openai_error(response) -> HTTPException:
                 detail=ErrorMessages.RATE_LIMIT_EXCEEDED
             )
         
-        # Content policy 위반
-        if "content_policy" in error_type.lower() or "policy" in error_message.lower():
+        # Content policy 위반 (DALL-E-3 내장 필터링)
+        if response.status_code == 400 and ("content_policy" in error_type.lower() or "policy" in error_message.lower()):
             return HTTPException(
-                status_code=403,
-                detail=ErrorMessages.CONTENT_POLICY_VIOLATION
+                status_code=400,
+                detail="요청한 내용이 이미지 생성 정책에 위배됩니다."
             )
         
         # 일반적인 API 에러
@@ -215,26 +148,20 @@ def _handle_openai_error(response) -> HTTPException:
             detail=f"{ErrorMessages.OPENAI_API_ERROR} (상태 코드: {response.status_code})"
         )
 
-@router.post("/safe-image-from-copy")
-def safe_image_from_copy(req: CopyToImageReq):
-    """보안 필터링을 거친 안전한 이미지 생성 (권장)"""
-    
-    # 보안 검증 및 정제
-    validated_req = _validate_and_clean_request(req)
-    
-    # 기존 검증된 API 호출
-    return image_from_copy(validated_req)
-
 @router.post("/image-from-copy")
 def image_from_copy(req: CopyToImageReq):
-    """원본 이미지 생성 API (내부용)"""
+    """텍스트로부터 이미지 생성"""
+    
+    # 기본 요청 검증
+    validated_req = _validate_request(req)
     
     try:
-        style_snippet = f" in {req.style} style" if req.style else ""
+        style_snippet = f" in {validated_req.style} style" if validated_req.style else ""
         prompt = (
             f'다음 문구에 어울리는 광고 이미지를 생성해줘{style_snippet}. '
-            f'Ad copy: "{req.text}". 높은 퀄리티, sharp, clean composition.'
+            f'Ad copy: "{validated_req.text}". 높은 퀄리티, sharp, clean composition.'
         )
+        
         url = f"{OPENAI_BASE}/images/generations"
         payload = {
             # gpt-image-1 권한 이슈 있으면 dall-e-3 사용
@@ -242,6 +169,9 @@ def image_from_copy(req: CopyToImageReq):
             "prompt": prompt,
             "size": "1024x1024",
         }
+        
+        # seed가 있으면 추가 (DALL-E-3는 seed를 직접 지원하지 않으므로 무시됨)
+        # 필요시 프롬프트에 포함하거나 다른 방식으로 처리
 
         # OpenAI API 호출
         r = requests.post(url, headers=_headers(), json=payload, timeout=180)
