@@ -1,6 +1,5 @@
 import streamlit as st
 from urllib.parse import quote
-from pathlib import Path
 import html, os
 
 st.set_page_config(page_title="광고 생성 도우미", layout="wide", initial_sidebar_state="collapsed")
@@ -15,437 +14,462 @@ if page_key:
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
 
 PAGES = [
-    {
-        "badge": "🖼️ IMAGE",
-        "thumb": f"{BACKEND_PUBLIC_URL}/static/images/1.png",
-        "title": "광고 이미지 생성",
-        "desc": "문구만 입력하면 스타일에 맞는 광고 이미지를 자동 생성합니다."
-    },
-    {
-        "badge": "✍️ COPY",
-        "thumb": f"{BACKEND_PUBLIC_URL}/static/images/2.png",
-        "title": "광고 글 생성",
-        "desc": "이미지/키워드 기반으로 그에 딱 맞는 광고글을 생성합니다."
-    },
-    {
-        "badge": "🧾 MENU",
-        "thumb": f"{BACKEND_PUBLIC_URL}/static/images/3.png",
-        "title": "메뉴판 생성",
-        "desc": "메뉴와 가격을 입력하면 그에 맞는 메뉴판을 만듭니다."
-    },
+    {"badge":"🖼️ IMAGE","thumb":f"{BACKEND_PUBLIC_URL}/static/images/1.png","title":"광고 이미지 생성","desc":"문구만 입력하면 그에 맞는 광고 이미지를 자동 생성합니다."},
+    {"badge":"✍️ COPY","thumb":f"{BACKEND_PUBLIC_URL}/static/images/2.png","title":"광고 글 생성","desc":"이미지/키워드 기반으로 그에 딱 맞는 광고글을 생성합니다."},
+    {"badge":"🧾 MENU","thumb":f"{BACKEND_PUBLIC_URL}/static/images/3.png","title":"메뉴판 생성","desc":"메뉴와 가격을 입력하면 그에 맞는 메뉴판을 만듭니다."},
 ]
 
 EXAMPLE_FILES = [f"example_{i}.png" for i in range(1, 9)]
-SAMPLES = [
-    (f"{BACKEND_PUBLIC_URL}/static/outputs/{fname}", f"Example {i}")
-    for i, fname in enumerate(EXAMPLE_FILES, start=1)
-]
+SAMPLES = [(f"{BACKEND_PUBLIC_URL}/static/outputs/{fname}", f"Example {i}") for i, fname in enumerate(EXAMPLE_FILES, start=1)]
+
 ROUTES = {
-    "광고 이미지 생성": "1_광고_이미지_생성",
-    "광고 글 생성":   "2_광고_글_생성",
-    "메뉴판 생성":     "3_메뉴판_생성",
+    "광고 이미지 생성":"1_광고_이미지_생성",
+    "광고 글 생성":"2_광고_글_생성",
+    "메뉴판 생성":"3_메뉴판_생성",
 }
 
+# --- builders ---
 def build_cards_html():
     items = []
     for c in PAGES:
         key = ROUTES[c["title"]]
         href = f"/?page={quote(key)}"
         items.append(f"""
-<a class="card" href="{href}">
-  <div class="card-thumb" style="background-image:url('{c["thumb"]}');">
+<a class="card" href="{href}" aria-label="{html.escape(c['title'])}">
+  <div class="card-head">
+    <div class="card-icon-wrap">
+      <img class="card-icon" src="{c['thumb']}" alt="" loading="lazy" decoding="async">
+    </div>
+    <div class="card-title">{html.escape(c["title"])}</div>
   </div>
-  <div class="card-body">
-    <div class="card-desc">{html.escape(c["desc"])} </div>
+  <div class="card-desc">{html.escape(c["desc"])}</div>
+  <div class="card-cta">
+    <span class="cta-icon">▶</span> <span class="cta-text">바로 시작하기</span>
   </div>
 </a>
 """)
     return "".join(items)
 
-def build_templates_html() -> str:
-    cards = []
+
+
+
+def build_templates_html():
+    cards=[]
     for url, cap in SAMPLES:
         cap_esc = html.escape(cap, quote=True)
         cards.append(f"""
-<div class="template">
-  <img src="{url}" alt="{cap_esc}" loading="lazy" decoding="async">
-</div>
+<div class="template"><img src="{url}" alt="{cap_esc}" loading="lazy" decoding="async"></div>
 """.strip())
     return "\n".join(cards)
+
+# --- (옵션) 폰트 ---
+FONT_CSS = f"""
+<style>
+@font-face {{
+  font-family:'SUIT';
+  src:url('{BACKEND_PUBLIC_URL}/static/fonts/SUIT-Variable.woff2') format('woff2-variations');
+  font-weight:100 900; font-style:normal; font-display:swap;
+}}
+@font-face {{
+  font-family:'GmarketSans';
+  src:url('{BACKEND_PUBLIC_URL}/static/fonts/GmarketSansBold.woff2') format('woff2');
+  font-weight:800; font-style:normal; font-display:swap;
+}}
+:root {{
+  --font-ui:'SUIT',system-ui,-apple-system,'Noto Sans KR',sans-serif;
+  --font-title:'GmarketSans','SUIT',system-ui,sans-serif;
+}}
+body,.stApp,.block-container{{font-family:var(--font-ui);}}
+</style>"""
+st.markdown(FONT_CSS, unsafe_allow_html=True)
 
 # --- CSS ---
 CSS = """
 <style>
+:root {
+  --bg1:#eaf2ff;
+  --bg2:#fbfbff;
+  --ink-1:#0f172a;
+  --ink-2:#334155;
+  --card:#fff;
+  --line:#e5e7eb;
+  --elev:0 6px 18px rgba(15,23,42,.08);
+  --elev2:0 12px 28px rgba(15,23,42,.12);
+  --radius:18px;
+  --gutter-l:clamp(4px,7vw,36px);
+  --gutter-r:clamp(16px,4vw,40px);
+  /* 타이틀 어두운 프리미엄 그라데이션 */
+  --title-a:#0b1b3a;
+  --title-b:#223a8a;
+  --title-c:#0f766e;
+}
+
+/* reset */
 html, body {
-  margin: 0; padding: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', Arial, 'Helvetica Neue', sans-serif;
-  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-  background: transparent;
+  margin:0;
+  padding:0;
 }
-.main-block { max-width: 1200px; margin: 0 auto; }
-.stApp, .stApp > header, .stApp > div, .block-container {
-  background: transparent !important;
+.stApp, .block-container {
+  background:transparent !important;
+}
+* {
+  box-sizing:border-box;
+}
+img {
+  display:block;
+  max-width:100%;
 }
 
-/* 배경 */
-.aurora-bg { 
-  position: fixed; inset: 0; z-index: -2; background: linear-gradient(180deg, #1a237e 0%, #0d1333 100%);
-}
-.aurora-layer {
-  position: fixed; inset: -10% -10% 0 -10%; z-index: -1; pointer-events: none;
+/* background */
+.aurora-bg {
+  position:fixed;
+  inset:0;
+  z-index:-2;
   background:
-    radial-gradient(1200px 300px at 20% 20%, rgba(91,108,255,0.35), transparent 60%),
-    radial-gradient(1000px 280px at 70% 35%, rgba(147,51,234,0.25), transparent 60%),
-    radial-gradient(900px 240px at 40% 70%, rgba(56,189,248,0.22), transparent 60%),
-    radial-gradient(1200px 320px at 85% 80%, rgba(99,102,241,0.28), transparent 60%);
-  filter: blur(14px) saturate(110%);
-  animation: auroraMove 22s ease-in-out infinite alternate;
-}
-@keyframes auroraMove {
-  0%   { transform: translateY(-2%) scale(1); }
-  50%  { transform: translateY(-5%) scale(1.03); }
-  100% { transform: translateY(-2%) scale(1); }
-}
-@keyframes fadeUp {
-  0% { opacity: 0; transform: translateY(20px); }
-  100% { opacity: 1; transform: translateY(0); }
+    radial-gradient(1200px 800px at 10% 0%, #cfe7ff 0%, transparent 55%),
+    radial-gradient(900px 700px at 85% 15%, #eadcff 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg1), var(--bg2));
 }
 
-/* 별 */
-.stars:before {
-  content:""; position: fixed; inset:0; z-index:-1; pointer-events:none;
-  background-image:
-    radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,0.6), transparent 60%),
-    radial-gradient(1.5px 1.5px at 70% 20%, rgba(255,255,255,0.45), transparent 60%),
-    radial-gradient(1.8px 1.8px at 35% 70%, rgba(255,255,255,0.5), transparent 60%),
-    radial-gradient(1.3px 1.3px at 85% 60%, rgba(255,255,255,0.35), transparent 60%);
-  opacity:.45;
+/* container left-anchored */
+.main-block {
+  max-width:none;
+  margin:0;
+  padding:56px var(--gutter-r) 64px var(--gutter-l);
 }
 
-/* Hero */
-.hero { padding: 68px 0 28px; text-align: center; color: #fff;
-  animation: fadeUp 1s ease both; animation-delay: 0s; }
+/* stray inline-code kill (</div> 같은 잔상 숨김) */
+.main-block code {
+  display:none !important;
+}
+
+/* reveal group animation (0.5s 간격) */
+.reveal {
+  opacity:0;
+  transform:translateY(16px);
+  animation:reveal .6s ease forwards;
+}
+.delay-0 { animation-delay:0s }
+.delay-1 { animation-delay:.5s }
+.delay-2 { animation-delay:1s }
+.delay-3 { animation-delay:1.5s }
+
+@keyframes reveal {
+  to {
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
+/* hero */
+.hero {
+  text-align:center;
+  margin:12px 0 6px;
+}
 .hero h1 {
-  font-family: 'Montserrat', 'Raleway', 'Pretendard Variable', sans-serif;
-  font-size: clamp(36px, 5vw, 56px);
-  font-weight: 900;
-  margin: 0;
-  letter-spacing: -0.01em;
-  background: linear-gradient(90deg, #60A5FA, #A78BFA, #34D399);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 14px rgba(100, 180, 255, 0.5);
+  font-family:var(--font-title);
+  font-weight:800;
+  font-size:clamp(44px,7vw,86px);
+  line-height:1.03;
+  letter-spacing:-.02em;
+  background:linear-gradient(100deg,var(--title-a),var(--title-b) 55%,var(--title-c));
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  text-shadow:0 2px 8px rgba(17,24,39,.14), 0 0 22px rgba(99,102,241,.10);
+  margin:0 0 12px;
 }
 .hero p {
-  font-family: 'Raleway', 'Pretendard Variable', 'Inter', sans-serif;
-  font-size: clamp(14px, 1.8vw, 20px);
-  font-weight: 400;
-  margin-top: 14px;
-  letter-spacing: 0.5px;
-  color: rgba(229, 231, 235, 0.9);
-  text-shadow: 0 0 6px rgba(50, 120, 200, 0.4);
+  color:var(--ink-2);
+  font-weight:600;
+  font-size:clamp(14px,1.6vw,18px);
+  margin:0 0 0 8px;
 }
 
-/* Section titles */
-.section-title {
-  font-family: 'Raleway', 'Pretendard Variable', sans-serif;
-  font-size: clamp(18px, 2vw, 26px);
-  font-weight: 700;
-  text-align: center;
-  margin: 40px 0 20px;
-  letter-spacing: 1px;
-  color: #E0E7FF;
-  position: relative;
+/* section titles */
+.section {
+  margin-top:48px;
 }
-.section-start { animation: fadeUp 1s ease both; animation-delay: 0.5s; }
-.section-templates { animation: fadeUp 1s ease both; animation-delay: 1s; }
+.section-inner{
+  max-width: calc(400px * 3 + 16px * 2); /* 1232px */
+  margin: 0 auto;
+}
+
+
+/* 제목은 계속 왼쪽 */
+.section-title{
+  font-family: var(--font-title); /* 타이틀 전용 폰트 */
+  font-weight: 800;               /* 굵게 */
+  font-size: 25px; /* 더 크게 */
+  line-height: 1.2;
+  color: var(--ink-1);
+  text-align: left;               /* 정렬은 유지 */
+  margin: 18px 0 10px 4px;        /* 여백은 취향대로 */
+  letter-spacing: -0.2px;
+}
 .section-title::after {
-  content: "";
-  display: block;
-  width: 80px;
-  height: 3px;
-  margin: 10px auto 0;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #60A5FA, #A78BFA, #34D399);
+  content:"";
+  display:block;
+  width:105px;
+  height:3px;
+  margin:10px 0 15px 0;
+  border-radius:2px;
+  background:linear-gradient(90deg,#60a5fa,#a78bfa,#34d399);
+}
+
+/* cards grid */
+.card-row{
+  display: grid;
+  grid-template-columns: repeat(3, 400px);  /* ← auto-fill 대신 3칸 고정 */
+  gap: 16px;
+  justify-content: center;                  /* 가운데 정렬 */
+}
+.card-row > :not(a.card) {
+  display:none !important;
 }
 
 /* 카드 */
-.card-row {
-  display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
-  padding: 8px 4px 4px;
-}
 .card {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-  width: 340px;
-  border-radius: 20px;
-  overflow: hidden;
-  position: relative;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.18);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.25);
-  transition: transform .25s ease, box-shadow .25s ease, filter .25s ease;
+  display:flex;
+  flex-direction:column;   /* 제목, 설명, CTA 순서대로 쌓임 */
+  text-decoration:none;
+  color:inherit;
+  border-radius:var(--radius);
+  background:rgba(255,255,255,0.75);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,0.45);
+  box-shadow:0 10px 24px rgba(15,23,42,.12);
+  padding:18px 20px;
+  transition:transform .22s ease, box-shadow .22s ease;
 }
 .card:hover {
-  transform: translateY(-6px) scale(1.02);
-  box-shadow: 0 20px 48px rgba(0,0,0,0.35), 0 0 16px rgba(120,180,255,0.35);
-  filter: brightness(1.08);
+  transform:translateY(-6px) scale(1.02);
+  box-shadow:0 16px 36px rgba(15,23,42,.18);
 }
 
-.card-thumb { height: 160px; width: 100%; background-size: cover; background-position: center; }
-.card-badge { position:absolute; top:10px; left:10px; background: rgba(0,0,0,.35); padding:6px 10px; border-radius:999px; font-weight:700; font-size:12px; }
-.card-body { padding: 16px 18px 18px; }
+/* 헤더 (아이콘 + 제목 한 줄) */
+.card-head {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:8px;
+}
+.card-icon {
+  width:56px;
+  height:56px;
+  flex:0 0 56px;
+  object-fit:contain;
+}
 .card-title {
-  font-size: 18px;
-  font-weight: 800;
-  text-align: center;
-  margin-bottom: 8px;
-  color: #FACC15;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  font-weight:600;
+  color:var(--ink-1);
+  font-size:25px;
+  line-height:1.3;
 }
+
+/* 설명 */
 .card-desc {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.5;
-  color: #E5E9FF;
-  opacity: 0.95;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-weight:600;
+  color:var(--ink-2);
+  font-size:14px;
+  line-height:1.55;
 }
 
-/* Templates */
+/* CTA 버튼 */
+.card-cta {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-top:60px;
+
+  margin-left:auto;   /* 버튼만 오른쪽으로 이동 */
+
+  padding:10px 14px;
+  border-radius:10px;
+  background:#111;
+  color:#fff;
+  font-weight:600;
+  font-size:14px;
+  transition:background .2s, transform .2s;
+  width:max-content;
+}
+
+
+.card-cta:hover {
+  background:#000;
+  transform:translateY(-2px);
+}
+
+/* CTA 아이콘 */
+.cta-icon {
+  font-size:14px;
+  line-height:1;
+}
+.cta-text {
+  line-height:1.3;
+}
+
+
+
+/* 예시 템플릿: 마키 + 가장자리 페이드 */
+.template-marquee {
+  position:relative;
+  overflow:hidden;
+  padding:14px 0 0;
+  max-width:calc(400px * 3 + 16px * 2);
+}
+.marquee-track {
+  display:flex;
+  gap:14px;
+  width:max-content;
+  will-change:transform;
+  animation:marquee 40s linear infinite;
+}
+.template-marquee:hover .marquee-track {
+  animation-play-state:paused;
+}
 .template {
-  flex: 0 0 auto;
-  width: 220px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,.18);
-  background: rgba(255,255,255,.06);
-  box-shadow: 0 10px 24px rgba(0,0,0,.18);
-  transition: transform .25s ease, box-shadow .25s ease;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:var(--elev);
+  overflow:hidden;
 }
-.template:hover {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 16px 36px rgba(0,0,0,.28), 0 0 14px rgba(120,180,255,0.35);
+.template img {
+  width:220px;
+  height:auto;
+  display:block;
 }
-.template-marquee { position: relative; overflow: hidden; padding: 8px 0 12px; }
-.marquee-track { display: flex; gap: 14px; will-change: transform; width: max-content; animation: marqueeRight 40s linear infinite; }
-.template-marquee:hover .marquee-track { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) { .marquee-track { animation: none; } }
-.template { flex:0 0 auto; width: 220px; border-radius:14px; overflow:hidden;
-  border:1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06);
-  box-shadow: 0 10px 24px rgba(0,0,0,.18); }
-.template img { display:block; width:100%; height:auto; }
-.template .cap { padding:8px 10px; font-size:12px; color:#fff; opacity:.9; }
-@keyframes marqueeRight { 0% { transform: translateX(-50%); } 100% { transform: translateX(0%); } }
+.template-marquee::before,
+.template-marquee::after {
+  content:"";
+  position:absolute;
+  top:0;
+  bottom:0;
+  width:80px;
+  pointer-events:none;
+  z-index:2;
+}
+.template-marquee::before {
+  left:0;
+  background:linear-gradient(to right, rgba(234,242,255,1), rgba(234,242,255,0));
+}
+.template-marquee::after {
+  right:0;
+  background:linear-gradient(to left, rgba(251,251,255,1), rgba(251,251,255,0));
+}
+@keyframes marquee {
+  0% { transform:translateX(-50%) }
+  100% { transform:translateX(0%) }
+}
 
-/* Footer */
+/* footer (밴드형) */
 .footer {
-  margin: 40px auto;
-  padding: 18px 24px;
-  max-width: 500px;
-  text-align: center;
-  font-family: 'Pretendard Variable', 'Noto Sans KR', sans-serif;
-  font-size: 14px;
-  color: rgba(229, 231, 235, 0.95);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 16px;
-  box-shadow: 0 4px 18px rgba(0,0,0,0.3), 0 0 12px rgba(100,180,255,0.25);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  animation: fadeUp 1.2s ease both;
-  animation-delay: 1.5s;
+  max-width:720px;
+  margin:100px auto 72px;
+  padding:22px 28px;
+  text-align:center;
+  border-radius:20px;
+  border:2px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.56)) padding-box,
+    linear-gradient(135deg, var(--brand-1), var(--brand-2), var(--brand-3)) border-box;
+  box-shadow:
+    0 10px 28px rgba(15,23,42,.12),
+    0 1px 0 rgba(255,255,255,.6) inset;
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  color:var(--ink-1);
+  font-weight:700;
+  line-height:1.7;
+  background-clip:padding-box, border-box;
+  border-top:none;
 }
-.footer:hover {
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 6px 24px rgba(0,0,0,0.4), 0 0 18px rgba(100,180,255,0.35);
+.footer b {
+  font-size:18px;
+  color:var(--ink-1);
+}
+@media (max-width:560px) {
+  .footer {
+    max-width:100%;
+    margin:32px var(--gutter-r);
+    padding:18px 20px;
+  }
 }
 
-/* Archive button */
+/* archive btn */
 .archive-btn {
-  position: fixed;
-  top: 72px;            
-  right: 32px;
-  padding: 12px 20px;   
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: 20px;
-  background: #FACC15;
-  color: #111;
-  text-decoration: none;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
-  transition: transform .25s ease, box-shadow .25s ease;
-
-  display: inline-flex; 
-  align-items: center;
-  line-height: 1;
-  cursor: pointer;
-
-  z-index: 2147483647;   
-  pointer-events: auto; 
+  position:fixed;
+  top:36px;
+  right:32px;
+  padding:12px 20px;
+  border-radius:999px;
+  line-height:1;
+  background:#ffffff;
+  color:#0f172a;
+  font-weight:800;
+  text-decoration:none;
+  border:3px solid #F59E0B;
+  box-shadow:0 8px 20px rgba(15,23,42,.10), inset 0 0 0 2px #fff;
+  z-index:2147483647;
+  transition:.15s;
 }
-
 .archive-btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  transform:translateY(-2px);
+  box-shadow:0 12px 28px rgba(15,23,42,.16), inset 0 0 0 2px #fff;
+}
+.archive-btn:focus-visible {
+  outline:3px solid #F59E0B;
+  outline-offset:3px;
 }
 
-
-.footer {
-  margin: 50px auto;
-  padding: 22px 28px;
-  max-width: 520px;
-  text-align: center;
-  font-family: 'Pretendard Variable','Noto Sans KR',sans-serif;
-  font-size: 15px;
-  color: rgba(229, 231, 235, 0.95);
-  background: linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 18px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 0 14px rgba(120,180,255,0.25);
-  transition: transform 0.35s ease, box-shadow 0.35s ease;
-  animation: fadeUp 1.2s ease both;
-  animation-delay: 1.5s;
+/* streamlit header clear */
+.stApp > header {
+  background:transparent;
 }
-
-.footer:hover {
-  transform: translateY(-5px) scale(1.02);
-  box-shadow: 0 6px 28px rgba(0,0,0,0.4), 0 0 20px rgba(120,180,255,0.4);
-}
-
-.footer-title {
-  font-size: 17px;
-  font-weight: 700;
-  margin-bottom: 6px;
-  color: #FACC15;
-}
-
-.footer-sub {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #A5B4FC;
-}
-
-.footer-names {
-  font-size: 14px;
-  line-height: 1.6;
-  color: rgba(229, 231, 235, 0.85);
-}
-
-
-/* 카드 베이스 */
-.card{
-  display:block; text-decoration:none; color:inherit;
-  width:340px; border-radius:18px; overflow:hidden; position:relative;
-  background: rgba(255,255,255,0.06);
-  border:1px solid rgba(255,255,255,0.16);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.22);
-  transition: transform .22s ease, box-shadow .22s ease, filter .22s ease;
-}
-.card:hover{
-  transform: translateY(-4px);
-  box-shadow: 0 16px 44px rgba(0,0,0,0.32);
-}
-
-/* 썸네일: 대비 강화 + 광택 */
-.card-thumb{
-  height: 188px; width:100%;
-  background-size: cover; background-position:center;
-  position:relative; isolation:isolate; /* ::before/::after 레이어 분리 */
-}
-/* 상부 하이라이트 + 미세 노이즈로 골드 질감 살리기 */
-.card-thumb::before{
-  content:""; position:absolute; inset:0; z-index:0;
-  background:
-    radial-gradient(120% 60% at 50% -10%, rgba(255,255,255,0.08), transparent 55%),
-    linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.00) 35%, rgba(0,0,0,0.18) 70%);
-}
-.card:hover .card-thumb::before{
-  background:
-    radial-gradient(120% 60% at 50% -10%, rgba(255,255,255,0.12), transparent 55%),
-    linear-gradient(180deg, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0.00) 33%, rgba(0,0,0,0.24) 72%);
-}
-
-/* 썸네일→본문 연결 그라데이션(경계 자연스럽게) */
-.card-thumb::after{
-  content:""; position:absolute; left:0; right:0; bottom:-1px; height:90px; z-index:1;
-  background: linear-gradient(180deg, rgba(0,0,0,0.00) 0%, rgba(0,0,0,0.22) 70%, rgba(0,0,0,0.35) 100%);
-}
-
-/* 바디: 글래스 느낌 + 위쪽 경계 은은하게 */
-.card-body{
-  position:relative; z-index:2;
-  padding: 16px 18px 18px;
-  background: linear-gradient(180deg, rgba(16,18,34,0.55) 0%, rgba(16,18,34,0.38) 100%);
-  backdrop-filter: blur(6px);
-  border-top: 1px solid rgba(255,255,255,0.10);
-}
-
-/* 본문 텍스트: 크기/굵기↑ + 섀도우로 선명하게 */
-.card-desc{
-  font-family: 'Pretendard Variable','Noto Sans KR','Segoe UI',Inter,system-ui,sans-serif;
-  font-size: 16px;            /* +1 업 */
-  font-weight: 700;
-  letter-spacing: .2px;
-  line-height: 1.6;
-  color: #ECF0FF;             /* 더 밝은 톤 */
-  text-shadow: 0 1px 0 rgba(0,0,0,0.28), 0 0 12px rgba(12,16,36,0.35);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-
-/* 포커스 접근성 */
-.card:focus-visible{ outline:2px solid #A78BFA; outline-offset:3px; }
-
-/* 작은 화면 최적화 */
-@media (max-width: 768px){
-  .card{ width:100%; }
-  .card-thumb{ height:170px; }
-  .card-desc{ font-size:15px; -webkit-line-clamp:3; }
-}
-
-
-
-
 </style>
+
 """
 st.markdown(CSS, unsafe_allow_html=True)
 
 # --- HTML BODY ---
 HTML_BODY = f"""
 <div class="aurora-bg"></div>
-<div class="aurora-layer"></div>
-<div class="stars"></div>
-
 <a class="archive-btn" href="/?page=4_%EB%82%B4%EA%B0%80_%EC%83%9D%EC%84%B1%ED%95%9C_%EC%9D%B4%EB%AF%B8%EC%A7%80">📂 보관함</a>
 
 <div class="main-block">
-  <div class="hero">
+  <!-- 1) 제목+부제 -->
+  <div class="hero reveal delay-0">
     <h1>광고 이미지/글 생성 서비스</h1>
     <p>소상공인을 위한 광고 이미지, 글 그리고 메뉴판 생성 AI</p>
   </div>
 
-  <div class="section-title section-start">시작하기</div>
-  <div class="card-row section-start">
-    {build_cards_html()}
-  </div>
-
-  <div class="section-title section-templates">예시 템플릿</div>
-  <div class="template-marquee section-templates">
-    <div class="marquee-track">
-      {build_templates_html()}
-      {build_templates_html()}
+  <!-- 2) 시작하기 + 카드들 -->
+  <div class="section reveal delay-1">
+    <div class="section-inner">
+      <div class="section-title">시작하기</div>
+      <div class="card-row">
+        { build_cards_html() }
+      </div>
     </div>
   </div>
 
-  <div class="footer">
-    <div class="footer-title">코드잇 스프린트 2기</div>
-    <div class="footer-sub">🌿 4팀 · 나뭇잎 마을 🌿</div>
-    <div class="footer-names">👨‍💻 이승종 · 정민영 · 신한호 · 주대성 👩‍💻</div>
+  <!-- 3) 예시 모음 -->
+  <div class="section reveal delay-2">
+    <div class="section-inner">
+      <div class="section-title">예시 모음</div>
+      <div class="template-marquee">
+        <div class="marquee-track">
+          { build_templates_html() }
+          { build_templates_html() }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4) 만든 사람들 -->
+  <div class="footer reveal delay-3">
+    <div><b>코드잇 스프린트 2기</b> <br> 🌿 4팀 · 나뭇잎 마을 <br> 이승종 · 정민영 · 신한호 · 주대성</div>
   </div>
 </div>
 """
