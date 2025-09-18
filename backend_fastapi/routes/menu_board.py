@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-import requests
+import io, requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -44,6 +44,7 @@ class MenuItem(BaseModel):
 class MenuReq(BaseModel):
     shop_name: Optional[str] = None
     items: List[MenuItem]
+    background_url: Optional[str] = None
     theme: Optional[str] = "simple"
 
 def _items_to_bullets(items: List[MenuItem]) -> str:
