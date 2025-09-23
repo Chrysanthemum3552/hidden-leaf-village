@@ -60,6 +60,7 @@ python main.py
 ```
 
 UI 접속: http://localhost:8188
+
 ---
 
 ### 디렉토리 구조
