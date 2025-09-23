@@ -108,13 +108,13 @@ highly detailed, sharp focus, clean composition, 8k quality, photorealistic"
 - 캐싱 후 실행 시간: 동일 모델 재실행 시 latency
 
 ### 3. 결과
-``` markdown
+
 | 모델                        | 크기 (GB) | 첫 실행 시간 | 캐싱 후 실행 시간 |
 |-----------------------------|-----------|--------------|------------------|
 | flux1-schnell-Q4_K_S.gguf   | 6.32 GB   | 48.12초      | 12.04초          |
 | flux1-schnell-Q6_K.gguf     | 9.16 GB   | 64.16초      | 14.04초          |
 | flux1-schnell-Q8_0.gguf     | 11.82 GB  | 76.17초      | 10.03초          |
-```
+
 ### 4. 인사이트
 
 - 모델 크기가 커질수록 첫 실행 시간 증가 → 디스크→VRAM 로딩 시간 때문
@@ -160,7 +160,6 @@ python flux_gguf_real.py --model flux1-schnell-Q4_K_S.gguf --prompt "a beautiful
 
 ### 주요 옵션
 
-```markdown
 | 옵션           | 설명                      | 기본값                        |
 |----------------|---------------------------|-------------------------------|
 | `--model`      | 실행할 GGUF 모델 파일명   | `flux1-schnell-Q4_K_S.gguf`   |
@@ -169,8 +168,6 @@ python flux_gguf_real.py --model flux1-schnell-Q4_K_S.gguf --prompt "a beautiful
 | `--steps`      | Diffusion 생성 스텝 수    | `4`                           |
 | `--compare`    | 모든 모델 비교 실행       | `False`                       |
 | `--comfyui_url`| ComfyUI 서버 URL          | `http://127.0.0.1:8188`       |
-
-```
 
 ---
 
