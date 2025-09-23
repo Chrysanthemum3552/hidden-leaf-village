@@ -60,7 +60,6 @@ python main.py
 ```
 
 UI 접속: http://localhost:8188
-
 ---
 
 ### 디렉토리 구조
@@ -126,8 +125,10 @@ highly detailed, sharp focus, clean composition, 8k quality, photorealistic"
 
 ✅ 결론
 
-- 빠른 실험 반복이 필요 → **Q4_K_S**
-- 품질+속도 균형 필요 → **Q8_0**
+- 출력값도 거의 비슷함
+- **Q8_0**  (품질 + 캐싱 후 속도 모두 우수)
+- 저사양 GPU 또는 빠른 경량 테스트 → **Q4_K_S**
+- Q6_K는 중간 옵션이지만 특출난 장점은 없음
 
 ## ⚡ 자동화 실행기 (flux_gguf_real.py)
 
