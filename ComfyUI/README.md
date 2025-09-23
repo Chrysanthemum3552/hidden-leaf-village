@@ -146,6 +146,8 @@ cd ComfyUI
 python main.py
 
 ```
+**Termial창 하나를 더 추가**
+
 
 ### 2) 별도 터미널에서 실행
 
