@@ -1,123 +1,177 @@
-import os, uuid, base64
-from datetime import datetime
-from pathlib import Path
-from typing import List, Optional
-
-import io, requests
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
-from dotenv import load_dotenv
-from PIL import Image, ImageDraw  # 폴백용
+from typing import List, Optional
+from PIL import Image, ImageDraw, ImageFont
+import os, io, requests, random, numpy as np
 
-# ---- env 로드 ----
-ROOT_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(dotenv_path=ROOT_DIR / ".env", override=True)
+from openai import OpenAI
 
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 router = APIRouter()
 
-OPENAI_BASE = os.getenv("TEAM_GPT_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-OPENAI_KEY = os.getenv("TEAM_GPT_API_KEY")
-BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
+FONT_CACHE = {}
+GOOGLE_FONTS_API_KEY = os.getenv("GOOGLE_FONTS_API_KEY")
+GOOGLE_FONTS_LIST_CACHE = None
 
-STORAGE_ROOT = os.getenv(
-    "STORAGE_ROOT",
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
-)
-OUTPUT_DIR = os.path.join(STORAGE_ROOT, "outputs")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-def _headers():
-    if not OPENAI_KEY:
-        raise HTTPException(status_code=500, detail="OpenAI API key missing")
-    h = {"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"}
-    org = os.getenv("OPENAI_ORG_ID")
-    proj = os.getenv("OPENAI_PROJECT_ID")
-    if org:  h["OpenAI-Organization"] = org
-    if proj: h["OpenAI-Project"] = proj
-    return h
 
 class MenuItem(BaseModel):
     name: str
     price: int
     desc: Optional[str] = None
+    badge: Optional[str] = None
+
 
 class MenuReq(BaseModel):
-    shop_name: Optional[str] = None
+    title: Optional[str] = None
     items: List[MenuItem]
+    theme: Optional[str] = None
     background_url: Optional[str] = None
-    theme: Optional[str] = "simple"
+    auto_desc: Optional[bool] = True
+    model: Optional[str] = "gpt-4o-mini"
+    temperature: Optional[float] = 0.7
+    font_styles: Optional[List[str]] = None
 
-def _items_to_bullets(items: List[MenuItem]) -> str:
-    lines = []
-    for it in items:
-        if it.desc:
-            lines.append(f"- {it.name} (₩{it.price}): {it.desc}")
-        else:
-            lines.append(f"- {it.name} (₩{it.price})")
-    return "\n".join(lines)
 
-@router.post("/menu-board")
-def menu_board(req: MenuReq):
-    title = req.shop_name or "MENU"
-    bullets = _items_to_bullets(req.items)
-    theme = req.theme or "simple"
+def get_google_font(style: str, size: int) -> ImageFont.ImageFont:
+    """구글 폰트에서 스타일과 한글을 지원하는 폰트를 찾아 다운로드하고 로드합니다."""
+    cache_key = f"{style.lower()}_{size}"
+    if cache_key in FONT_CACHE:
+        font_path = FONT_CACHE[cache_key]
+        font_path.seek(0)
+        return ImageFont.truetype(font_path, size)
 
-    prompt = (
-        f"{theme} 스타일의 고해상도 음식점 메뉴 포스터를 디자인해줘. "
-        f"제목: {title}. 깔끔한 헤더, 읽기 쉬운 항목 리스트, 적절한 간격, "
-        f"테마에 맞는 은은한 장식, 한국어에 적합한 타이포그래피를 포함할 것. "
-        f"메뉴 항목:\n{bullets}\n"
-        "출력은 완성된 인쇄용 메뉴 포스터처럼 보여야 한다."
-    )
+    default_font = ImageFont.load_default()
+    if not GOOGLE_FONTS_API_KEY:
+        print("⚠️ GOOGLE_FONTS_API_KEY is not set. Using default font.")
+        return default_font
 
-    # 1) OpenAI Images API 시도 (정사각형만 허용됨)
+    global GOOGLE_FONTS_LIST_CACHE
     try:
-        url = f"{OPENAI_BASE}/images/generations"
-        payload = {
-            "model": "dall-e-3",
-            "prompt": prompt,
-            "size": "1024x1024",  # 정사각형 (400 회피)
-            "response_format": "b64_json",
-        }
-        r = requests.post(url, headers=_headers(), json=payload, timeout=180)
-        r.raise_for_status()
-        data = r.json()
-        b64 = data["data"][0]["b64_json"]
-        img_bytes = base64.b64decode(b64)
+        if not GOOGLE_FONTS_LIST_CACHE:
+            print("Fetching Google Fonts list...")
+            response = requests.get(
+                f"https://www.googleapis.com/webfonts/v1/webfonts?key={GOOGLE_FONTS_API_KEY}&sort=popularity")
+            response.raise_for_status()
+            GOOGLE_FONTS_LIST_CACHE = response.json().get("items", [])
 
-        save_name = f"menu_board_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
-        save_path = os.path.join(OUTPUT_DIR, save_name)
-        with open(save_path, "wb") as f:
-            f.write(img_bytes)
+        style_keywords = []
+        if any(s in style for s in ["붓글씨", "calligraphy", "serif", "명조"]):
+            style_keywords.append("serif")
+        if any(s in style for s in ["손글씨", "handwriting", "pen"]):
+            style_keywords.append("handwriting")
+        if any(s in style for s in ["고딕", "gothic", "sans-serif"]):
+            style_keywords.append("sans-serif")
 
-        file_path = os.path.abspath(save_path).replace("\\", "/")
-        file_url = f"{BACKEND_PUBLIC_URL}/static/outputs/{save_name}"
-        return {"ok": True, "output_path": file_path, "file_url": file_url}
+        candidate_fonts = []
+        for f in GOOGLE_FONTS_LIST_CACHE:
+            if "korean" in f.get("subsets", []):
+                if f.get("category") in style_keywords or any(
+                        kw.replace("-", "") in f["family"].lower().replace(" ", "") for kw in style_keywords):
+                    candidate_fonts.append(f)
 
-    except requests.RequestException:
-        # 2) 실패 시 폴백: Pillow로 간단히 렌더
-        img = Image.new("RGB", (1024, 1440), color=(250, 250, 245))
-        d = ImageDraw.Draw(img)
-        y = 40
-        d.text((40, y), title, fill=(20, 20, 20)); y += 60
-        d.text((40, y), f"Theme: {theme}", fill=(80, 80, 80)); y += 40
-        d.text((40, y), "-" * 50, fill=(120, 120, 120)); y += 20
+        if not candidate_fonts:
+            print(f"No specific font found for style '{style}'. Falling back to Noto Sans KR.")
+            candidate_fonts = [f for f in GOOGLE_FONTS_LIST_CACHE if f["family"] == "Noto Sans KR"]
 
-        for it in req.items:
-            line = f"{it.name}  ......  ₩{it.price}"
-            d.text((40, y), line, fill=(30, 30, 30)); y += 32
-            if it.desc:
-                d.text((60, y), it.desc, fill=(90, 90, 90)); y += 26
-        y += 20
-        d.text((40, y), "-" * 50, fill=(120, 120, 120))
+        chosen_font = random.choice(candidate_fonts)
+        print(f"Selected font for style '{style}': {chosen_font['family']}")
 
-        save_name = f"menu_board_fallback_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
-        save_path = os.path.join(OUTPUT_DIR, save_name)
-        img.save(save_path)
+        files = chosen_font.get("files", {})
+        font_url = files.get("regular") or files.get("400") or next(iter(files.values()), None)
 
-        file_path = os.path.abspath(save_path).replace("\\", "/")
-        file_url = f"{BACKEND_PUBLIC_URL}/static/outputs/{save_name}"
-        return {"ok": True, "output_path": file_path, "file_url": file_url}
+        if not font_url:
+            raise ValueError(f"No font file URL found for {chosen_font['family']}")
+
+        font_res = requests.get(font_url)
+        font_res.raise_for_status()
+        font_path = io.BytesIO(font_res.content)
+        FONT_CACHE[cache_key] = font_path
+        font_path.seek(0)
+
+        return ImageFont.truetype(font_path, size)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Server error: {e}")
+        print(f"❌ Failed to load Google Font for style '{style}': {e}. Using default font.")
+        return default_font
+
+
+def get_text_color(background: Image.Image) -> str:
+    """배경 이미지의 평균 밝기를 계산하여 적절한 텍스트 색상을 반환합니다."""
+    thumb = background.resize((50, 50)).convert("L")
+    avg_brightness = np.mean(np.array(thumb))
+    return "#333333" if avg_brightness > 128 else "#FFFFFF"
+
+
+def gpt_desc(name: str, model: str, temperature: float) -> Optional[str]:
+    """GPT로 간단 메뉴 설명 한 줄 생성 (실패 시 None)."""
+    if not client.api_key: return None
+    try:
+        prompt = f"메뉴판에 들어갈 '{name}' 의 짧고 먹음직스러운 한국어 설명을 15자 이내로 한 줄로 써줘."
+        resp = client.chat.completions.create(
+            model=model,
+            temperature=temperature,
+            max_tokens=60,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        text = (resp.choices[0].message.content or "").strip().replace('"', '').replace("'", "")
+        return text
+    except Exception as e:
+        print(f"gpt_desc failed: {e}")
+        return None
+
+
+def render_menu(req: MenuReq):
+    w, h = 1080, 1528
+
+    try:
+        r = requests.get(req.background_url, timeout=10)
+        r.raise_for_status()
+        canvas = Image.open(io.BytesIO(r.content)).convert("RGBA")
+    except Exception:
+        canvas = Image.new("RGBA", (w, h), (245, 245, 245, 255))
+
+    draw = ImageDraw.Draw(canvas)
+    text_color = get_text_color(canvas.convert("RGB"))
+
+    title_font_style = req.font_styles[0] if req.font_styles and len(req.font_styles) > 0 else "고딕"
+    item_font_style = req.font_styles[1] if req.font_styles and len(req.font_styles) > 1 else "고딕"
+
+    title_font = get_google_font(title_font_style, 72)
+    item_font = get_google_font(item_font_style, 42)
+    desc_font = get_google_font(item_font_style, 30)
+
+    if req.title:
+        draw.text((w // 2, 150), req.title, font=title_font, fill=text_color, anchor="ms")
+
+    y = 300
+    for it in req.items:
+        price = f"{it.price:,}원"
+        draw.text((120, y), it.name, font=item_font, fill=text_color, anchor="ls")
+        draw.text((w - 120, y), price, font=item_font, fill=text_color, anchor="rs")
+
+        y += 60
+        desc = it.desc
+
+        # ✅ [수정] gpt_desc 호출 로직을 복원했습니다.
+        if (desc is None or not str(desc).strip()) and req.auto_desc:
+            desc = gpt_desc(it.name, req.model or "gpt-4o-mini", float(req.temperature or 0.7)) or ""
+
+        if desc:
+            draw.text((120, y), desc, font=desc_font, fill=text_color, anchor="ls")
+            y += 40
+
+        y += 40
+
+    return canvas.convert("RGB")
+
+
+@router.post("/menu-board")
+def generate_menu(req: MenuReq):
+    img = render_menu(req)
+    storage = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+    out_dir = os.path.join(storage, "outputs")
+    os.makedirs(out_dir, exist_ok=True)
+    fname = f"menu_{random.randint(0, 999999):06}.png"
+    img.save(os.path.join(out_dir, fname), "PNG")
+    base = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    return {"ok": True, "file_url": f"{base}/static/outputs/{fname}"}
