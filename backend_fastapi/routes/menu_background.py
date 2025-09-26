@@ -73,6 +73,5 @@ def make_menu_background(req: BgReq):
     fname = f"bg_dalle_{random.randint(0, 999999):06}.png"
     img.save(os.path.join(out_dir, fname), "PNG")
 
-
     base = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
     return {"ok": True, "background_url": f"{base}/static/outputs/{fname}", "theme": "dalle_generated"}
