@@ -13,7 +13,7 @@ seed = st.number_input("seed(선택)", value=0, step=1)
 if st.button("이미지 생성"):
     with st.spinner("생성 중..."):
         r = requests.post(f"{BACKEND}/generate/image-from-copy",
-                          json={"text": text, "style": style or None, "seed": seed or None}, timeout=120)
+                          json={"text": text, "style": style or None, "seed": seed or None}, timeout=300)
         if r.ok:
             data = r.json()
             st.success("완료!")
