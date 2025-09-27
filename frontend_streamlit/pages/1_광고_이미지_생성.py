@@ -175,7 +175,7 @@ if generate:
                 resp = requests.post(
                     f"{BACKEND}/generate/image-from-copy",
                     json=payload,
-                    timeout=120,
+                    timeout=300,
                 )
             except Exception as e:
                 st.error(f"백엔드 요청 실패: {e}")
