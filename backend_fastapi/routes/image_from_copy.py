@@ -1,3 +1,31 @@
+"""
+한국어 -> 영어 번역 + FLUX 이미지 생성 API
+
+전제 조건 (각각의 터미널에서 실행):
+1. ComfyUI 서버가 먼저 실행되어야 합니다:(ComfyUI가 git clone 되어 있다고 가정)
+   cd ~/hidden-leaf-village/ComfyUI/ComfyUI
+   python main.py
+   
+2. 필요한 모델 파일들이 ComfyUI 디렉토리에 있어야 합니다:
+   - models/unet/flux1-schnell-Q4_K_S.gguf
+   - models/clip/clip_l.safetensors
+   - models/clip/t5xxl_fp16.safetensors  
+   - models/vae/ae.safetensors
+
+3. 번역 모델이 프로젝트 models/ 디렉토리에 있어야 합니다:
+   - models/yanolja_rosetta_12b_q8_0.gguf
+
+사용법:
+1. ComfyUI 서버 실행: cd ComfyUI/ComfyUI && python main.py
+2. FastAPI 서버 실행: python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+3. POST 요청을 /image-from-copy 엔드포인트로 전송:
+   {
+       "text": "하늘을 나는 고양이",
+       "style": "선택적 스타일 (예: 'realistic')",
+       "seed": 0  # 선택적 시드 값
+   }
+"""
+
 import os, uuid
 from datetime import datetime
 from pathlib import Path
@@ -10,7 +38,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# 로컬 모델 imports
 try:
     from llama_cpp import Llama
     GGUF_AVAILABLE = True
