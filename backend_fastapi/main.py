@@ -42,6 +42,5 @@ from routes.menu_background import router as menu_background_router
 app.include_router(image_from_copy_router, prefix="/generate", tags=["image-from-copy"])
 app.include_router(copy_from_image_router, prefix="/generate", tags=["copy-from-image"])
 app.include_router(menu_board_router, prefix="/generate", tags=["menu-board"])
-
 app.include_router(menu_redesigner_router, prefix="/redesign", tags=["menu-redesign"])
 app.include_router(menu_background_router, prefix="/generate", tags=["menu-background"])
