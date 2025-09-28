@@ -51,7 +51,7 @@ wget -O ComfyUI/models/vae/ae.safetensors \
 #### - Text Encoder (CLIP)
 ```bash
 wget -O ComfyUI/models/clip/clip_l.safetensors \
-  https://huggingface.co/openai/clip-vit-large-patch14/resolve/main/pytorch_model.bin
+  https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.fp8_e4m3fn.safetensors
 ```
 ### ▶️ 실행
 ```bash
