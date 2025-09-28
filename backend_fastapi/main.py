@@ -35,12 +35,19 @@ for sub in ("uploads", "outputs"):
 # http://localhost:8000/static/outputs/파일.png → hidden-leaf-village/data/outputs/파일.png
 app.mount("/static", StaticFiles(directory=STORAGE_ROOT), name="static")
 
-# 라우터 import
+# 라우터
 from routes.image_from_copy import router as image_from_copy_router
 from routes.copy_from_image import router as copy_from_image_router
 from routes.menu_board import router as menu_board_router
 
 # 엔드포인트 등록
+from routes.menu_redesigner import router as menu_redesigner_router
+from routes.menu_background import router as menu_background_router
+
+
+# --- 라우터 포함 ---
 app.include_router(image_from_copy_router, prefix="/generate", tags=["image-from-copy"])
 app.include_router(copy_from_image_router, prefix="/generate", tags=["copy-from-image"])
 app.include_router(menu_board_router, prefix="/generate", tags=["menu-board"])
+app.include_router(menu_redesigner_router, prefix="/redesign", tags=["menu-redesign"])
+app.include_router(menu_background_router, prefix="/generate", tags=["menu-background"])
