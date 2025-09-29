@@ -1,8 +1,6 @@
+# -*- coding: utf-8 -*-
 import os
 from typing import Optional, Dict, Any
-from pathlib import Path
-from urllib.parse import urlparse
-
 import requests
 import streamlit as st
 from dotenv import load_dotenv
@@ -10,7 +8,7 @@ from dotenv import load_dotenv
 # 1) 환경/상수
 load_dotenv()
 
-BACKEND: str = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND: str = os.getenv("BACKEND_URL", "https://hidden-leaf-village.onrender.com")
 API_ENDPOINT: str = f"{BACKEND}/generate/copy-from-image"
 REQ_TIMEOUT: int = 120
 
@@ -24,6 +22,7 @@ def compose_persona(age: str, role: str) -> str:
     return age or role or ""
 
 def fetch_bytes(url: Optional[str], timeout: int = 10) -> Optional[bytes]:
+    """URL에서 이미지 바이트 가져오기 (Render 환경 대응)"""
     if not url:
         return None
     try:
@@ -31,15 +30,7 @@ def fetch_bytes(url: Optional[str], timeout: int = 10) -> Optional[bytes]:
         r.raise_for_status()
         return r.content
     except Exception:
-        try:
-            alt = url.replace("localhost", "127.0.0.1")
-            if alt != url:
-                r2 = requests.get(alt, timeout=timeout)
-                r2.raise_for_status()
-                return r2.content
-        except Exception:
-            return None
-    return None
+        return None
 
 def post_generate(files: Dict[str, Any], data: Dict[str, Any]) -> requests.Response:
     return requests.post(API_ENDPOINT, files=files, data=data, timeout=REQ_TIMEOUT)
@@ -216,36 +207,36 @@ if generate:
 
             try:
                 resp = post_generate(files, data)
+                resp.raise_for_status()
             except Exception as e:
                 st.error(f"요청 오류: {e}")
             else:
-                if not resp.ok:
-                    st.error(f"실패: {resp.text}")
-                else:
-                    res = resp.json()
-                    st.success("완료! 🎉 생성된 광고 문구를 확인하세요.")
+                res = resp.json()
+                st.success("완료! 🎉 생성된 광고 문구를 확인하세요.")
 
-                    img_url = res.get("uploaded_url")
-                    img_path = res.get("uploaded_path")
-                    content = fetch_bytes(img_url) if img_url else None
-
+                # 🔑 반드시 URL만 사용
+                img_url = res.get("uploaded_url")
+                if img_url and img_url.startswith("http"):
+                    content = fetch_bytes(img_url)
                     if content:
                         st.image(content, caption="업로드 이미지", use_container_width=True)
-                    elif img_path and os.path.exists(img_path):
-                        st.image(img_path, caption="업로드 이미지(로컬)", use_container_width=True)
 
-                    st.subheader("생성된 광고 문구")
-                    st.write(res.get("copy", ""))
+                st.subheader("생성된 광고 문구")
+                st.write(res.get("copy", ""))
 
-                    structured = res.get("structured") or {}
-                    if structured:
-                        st.caption("헤드라인 / 서브라인 / 해시태그")
-                        st.write(f"**{structured.get('headline','')}**")
-                        st.write(structured.get('subline',''))
-                        tags = " ".join(structured.get('hashtags', []))
-                        if tags:
-                            st.write(tags)
+                structured = res.get("structured") or {}
+                if structured:
+                    st.caption("헤드라인 / 서브라인 / 해시태그")
+                    st.write(f"**{structured.get('headline','')}**")
+                    st.write(structured.get('subline',''))
+                    tags = " ".join(structured.get('hashtags', []))
+                    if tags:
+                        st.write(tags)
 
-                    st.caption(f"log: {res.get('log_url') or res.get('log_path')}")
-                    with st.expander("응답 원본(JSON) 보기"):
-                        st.json(res)
+                # 로그도 file path 대신 URL
+                log_url = res.get("log_url")
+                if log_url:
+                    st.caption(f"log: {log_url}")
+
+                with st.expander("응답 원본(JSON) 보기"):
+                    st.json(res)

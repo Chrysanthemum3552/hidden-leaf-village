@@ -1,8 +1,5 @@
+# -*- coding: utf-8 -*-
 import os
-import uuid
-from pathlib import Path
-from urllib.parse import urlparse
-
 import requests
 import streamlit as st
 from dotenv import load_dotenv
@@ -11,7 +8,7 @@ from dotenv import load_dotenv
 # Env & Page Config
 # ----------------------------
 load_dotenv()
-BACKEND = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+BACKEND = os.getenv("BACKEND_URL", "https://hidden-leaf-village.onrender.com").rstrip("/")
 
 st.set_page_config(page_title="🖼️ 광고 이미지 생성", page_icon="🖼️", layout="wide")
 
@@ -49,13 +46,13 @@ st.markdown(
 .stButton > button[kind="secondary"] {
   margin: 8px 0 14px 0;
   padding: 6px 14px;
-  border-radius: 999px; /* 둥글게 */
+  border-radius: 999px;
   font-weight: 800;
   color: #0f172a;
   background: 
-    linear-gradient(#fff, #fff) padding-box, /* 안쪽 배경 */
-    linear-gradient(90deg, #2563eb, #9333ea) border-box; /* 바깥 테두리 */
-  border: 3px solid transparent; /* 투명 border로 공간 확보 */
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(90deg, #2563eb, #9333ea) border-box;
+  border: 3px solid transparent;
   box-shadow: 0 6px 14px rgba(15,23,42,.08);
   transition: .15s;
 }
@@ -64,9 +61,6 @@ st.markdown(
   transform: translateY(-2px);
   box-shadow: 0 10px 20px rgba(15,23,42,.14);
 }
-
-
-
 
 /* help box */
 .hint { font-size:14px; line-height:1.55; margin:10px 0;
@@ -115,42 +109,15 @@ st.markdown(
 )
 
 # ----------------------------
-# Helpers
-# ----------------------------
-def guess_public_url(output_path: str) -> str:
-    if not output_path:
-        return ""
-    p = output_path.strip()
-    if p.startswith("http://") or p.startswith("https://"):
-        return p
-    if "/static/" in p:
-        tail = p.split("/static/", 1)[-1]
-        return f"{BACKEND}/static/{tail.lstrip('/')}"
-    name = os.path.basename(p)
-    return f"{BACKEND}/static/outputs/{name}"
-
-def save_to_frontend_outputs(public_url: str) -> Path:
-    project_root = Path(__file__).resolve().parents[2]
-    out_dir = project_root / "data" / "outputs"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    parsed = urlparse(public_url)
-    name = os.path.basename(parsed.path) or f"gen_{uuid.uuid4().hex}.png"
-    if "." not in name: name += ".png"
-    save_path = out_dir / name
-    resp = requests.get(public_url, timeout=120); resp.raise_for_status()
-    with open(save_path, "wb") as f: f.write(resp.content)
-    return save_path
-
-# ----------------------------
 # Form UI
 # ----------------------------
 st.markdown('<div class="page"><div class="card">', unsafe_allow_html=True)
 
-# 도움말 버튼을 위로 이동
-if st.button("💡 도움말 보기", key="help", use_container_width=False):
-    st.session_state["show_help"] = not st.session_state.get("show_help", False)
+# 도움말 버튼
+if st.button("💡 도움말 보기", key="help_img", use_container_width=False):
+    st.session_state["show_help_img"] = not st.session_state.get("show_help_img", False)
 
-if st.session_state.get("show_help", False):
+if st.session_state.get("show_help_img", False):
     st.markdown(
         """
 <div class="hint">
@@ -165,14 +132,13 @@ if st.session_state.get("show_help", False):
 - “비건 초콜릿 케이크 런칭, 첫 구매 1+1 쿠폰 제공, 오늘만!”<br><br>
 
 <b>팁</b><br>
-- 원하는 분위기를 "🎨 스타일(선택)"란에 적어주세요 (예: 귀여운·여름 분위기·빈티지).<br>
+- 원하는 분위기를 "🎨 스타일(선택)"란에 적어주세요.<br>
 - 짧고 간결한 문장이 더 효과적입니다.
 </div>
 """,
         unsafe_allow_html=True,
     )
 
-# 입력 라벨을 HTML로 직접 작성 → emoji 표시 문제 해결
 st.markdown("### ✍️ 광고 문구 입력", unsafe_allow_html=True)
 text = st.text_area(
     label="",
@@ -198,28 +164,30 @@ if generate:
     if not text.strip():
         st.warning("광고 문구를 입력해주세요.")
     else:
-        payload = {"text": text.strip(),
-                   "style": (style.strip() or None),
-                   "seed": (int(seed) if int(seed) != 0 else None)}
+        payload = {
+            "text": text.strip(),
+            "style": style.strip() or None,
+            "seed": int(seed) if seed else None
+        }
         with st.spinner("이미지 생성 중..."):
             try:
-                resp = requests.post(f"{BACKEND}/generate/image-from-copy",
-                                     json=payload, timeout=300)
+                resp = requests.post(
+                    f"{BACKEND}/generate/image-from-copy",
+                    json=payload,
+                    timeout=300
+                )
+                resp.raise_for_status()
             except Exception as e:
                 st.error(f"백엔드 요청 실패: {e}")
             else:
-                if not resp.ok:
-                    st.error(f"실패: {resp.status_code} - {resp.text}")
+                data = resp.json()
+                file_url = data.get("file_url")
+
+                if not file_url or not file_url.startswith("http"):
+                    st.error(f"이미지 URL이 없습니다. 응답: {data}")
                 else:
-                    try: data = resp.json()
-                    except: st.error("응답 파싱 실패"); st.stop()
-                    output_path = data.get("output_path") or data.get("path") or ""
-                    public_url = guess_public_url(output_path)
-                    if not public_url: st.error("이미지 경로 확인 불가"); st.stop()
                     st.success("완료! 🎉 생성된 이미지를 확인하세요.")
-                    st.image(public_url, use_container_width=True, caption="생성 결과")
-                    try:
-                        saved_path = save_to_frontend_outputs(public_url)
-                        st.caption(f"💾 저장됨: data/outputs/{os.path.basename(saved_path)}")
-                    except Exception as e:
-                        st.warning(f"로컬 저장 실패: {e}")
+                    st.image(file_url, use_container_width=True, caption="생성 결과")
+
+                    # 디버깅용
+                    st.code(file_url)

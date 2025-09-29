@@ -3,9 +3,11 @@ import os, requests
 import streamlit as st
 from dotenv import load_dotenv
 
+# ----------------------------
 # 환경 변수 로드
+# ----------------------------
 load_dotenv()
-BACKEND = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND = os.getenv("BACKEND_URL", "https://hidden-leaf-village.onrender.com")
 
 # ----------------------------
 # 페이지 기본 설정
@@ -95,7 +97,7 @@ st.markdown(
 # ----------------------------
 st.markdown(
     """
-<div class="page">Hot/Iced
+<div class="page">
   <div class="hero">
     <h1>메뉴판 생성</h1>
     <p>가게명과 메뉴를 입력하면 테마에 맞는 메뉴판 이미지를 자동 생성하고, 결과를 우측 상단 "📂보관함"에 저장합니다.</p>
@@ -170,7 +172,6 @@ def render_items():
             except Exception:
                 st.experimental_rerun()
 
-
 render_items()
 
 # 메뉴 추가 버튼
@@ -180,7 +181,6 @@ if st.button("➕ 메뉴 추가", use_container_width=True, type="secondary"):
         st.rerun()
     except Exception:
         st.experimental_rerun()
-
 
 # 메뉴판 생성 버튼
 generate = st.button("✨ 메뉴판 생성", use_container_width=True, type="primary")
@@ -204,12 +204,13 @@ if generate:
 
             st.success("완료! 🎉 생성된 메뉴판을 확인하세요.")
 
-            img_url = data.get("file_url") or data.get("output_path")
-            if img_url:
+            # 반드시 file_url만 사용
+            img_url = data.get("file_url")
+            if img_url and img_url.startswith("http"):
                 st.image(img_url, caption="생성된 메뉴판", use_container_width=True)
                 st.code(img_url)
             else:
-                st.error(f"응답에 이미지 경로가 없습니다.\n{data}")
+                st.error(f"응답에 올바른 이미지 URL이 없습니다.\n{data}")
 
         except requests.RequestException as e:
             st.error(f"실패: {e}\n응답: {getattr(e, 'response', None) and getattr(e.response, 'text', '')}")

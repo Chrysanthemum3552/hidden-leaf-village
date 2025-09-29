@@ -11,7 +11,7 @@ if page_key:
     st.switch_page(f"pages/{page_key}.py")
 
 # --- 데이터 ---
-BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "https://hidden-leaf-village.onrender.com").rstrip("/")
 
 PAGES = [
     {"badge":"🖼️ IMAGE","thumb":f"{BACKEND_PUBLIC_URL}/static/images/1.png","title":"광고 이미지 생성","desc":"문구만 입력하면 그에 맞는 광고 이미지를 자동 생성합니다."},
