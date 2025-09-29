@@ -33,48 +33,50 @@ st.markdown("""
 .card .media{ width:100%; aspect-ratio:1/1; overflow:hidden; }
 .card .media img{ width:100%; height:100%; object-fit:cover; display:block; }
 
-/* 버튼 영역 */
-.actions { width:100%; margin-top:10px; }
-.btn-row {
-  display:flex;
-  gap:8px;              /* 버튼 사이 간격 */
+/* 버튼 영역(시각적 여백) */
+.actions{ height:10px; }
+
+/* Streamlit 위젯을 원래 디자인처럼 보이게 커스텀 */
+div[data-testid="stDownloadButton"],
+div[data-testid="stButton"]{
   width:100%;
 }
-.btn-row a,
-.btn-row button {
-  flex:1;               /* 동일한 비율 */
-  text-align:center;
+div[data-testid="stDownloadButton"] > button,
+div[data-testid="stButton"] > button{
+  width:100%;
   border-radius:12px;
   padding:12px 0;
   font-size:13.5px;
   font-weight:700;
   border:1px solid transparent;
-  cursor:pointer;
   box-shadow:0 2px 8px rgba(0,0,0,0.06);
-  white-space:nowrap;   /* 줄바꿈 방지 */
-  min-width:0;          /* flex-shrink 허용 */
+  white-space:nowrap;
+  min-width:0;
 }
 
-/* 다운로드 버튼 */
-.btn-row .download {
+/* 다운로드 버튼(초록) */
+div[data-testid="stDownloadButton"] > button{
   background:#e9f9ef;
   color:#0f5132;
   border-color:#b7eb8f;
-  text-decoration:none; /* 링크 밑줄 제거 */
-  display:flex;
-  align-items:center;
-  justify-content:center;
 }
 
-/* 삭제 버튼 */
-.btn-row .delete {
+/* 삭제 버튼(빨강) */
+div[data-testid="stButton"] > button{
   background:#fdecec;
   color:#7f1d1d;
   border-color:#f8b4b4;
 }
+
+/* hover 효과 약간 추가(옵션) */
+div[data-testid="stDownloadButton"] > button:hover{
+  filter:brightness(0.98);
+}
+div[data-testid="stButton"] > button:hover{
+  filter:brightness(0.98);
+}
 </style>
 """, unsafe_allow_html=True)
-
 
 # --- 제목 ---
 st.markdown('<div class="page-title">📁 <span>내가 생성한 이미지</span></div>', unsafe_allow_html=True)
@@ -120,20 +122,33 @@ else:
                         unsafe_allow_html=True
                     )
 
-                    # 버튼 행 (다운로드 / 삭제)
-                    st.markdown(
-                        f"""
-                        <div class="actions">
-                          <div class="btn-row">
-                            <a href="data:{mime};base64,{b64}" 
-                               download="{img_path.name}" 
-                               class="download">⬇ 다운로드</a>
-                            <button class="delete" onclick="fetch('/delete/{i}')">🗑 삭제</button>
-                          </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                    # 버튼 행 여백(원래 .actions 역할)
+                    st.markdown('<div class="actions"></div>', unsafe_allow_html=True)
+
+                    # 버튼 2개를 같은 행처럼 보이도록 columns 사용
+                    dl_col, del_col = st.columns(2, gap="small")
+
+                    with dl_col:
+                        st.download_button(
+                            "⬇ 다운로드",
+                            data=img_bytes,
+                            file_name=img_path.name,
+                            mime=mime,
+                            key=f"download_{i}",
+                            use_container_width=True
+                        )
+
+                    with del_col:
+                        if st.button("🗑 삭제", key=f"delete_{i}", use_container_width=True):
+                            try:
+                                img_path.unlink()  # 파일 삭제
+                                st.success(f"{img_path.name} 삭제됨")
+                                try:
+                                    st.rerun()
+                                except Exception:
+                                    st.experimental_rerun()
+                            except Exception as e:
+                                st.error(f"삭제 실패: {e}")
 
                 except Exception as e:
                     st.error(f"{img_path.name} 불러오기 실패: {e}")

@@ -17,8 +17,14 @@ GOOGLE_FONTS_LIST_CACHE = None
 FONT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fonts"))
 DEFAULT_FONT_REGULAR = os.path.join(FONT_DIR, "NotoSansKR-Regular.ttf")
 
+# --- 저장 경로 설정 (상위 2폴더의 data) ---
+STORAGE_ROOT = os.getenv(
+    "STORAGE_ROOT",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
+)
+
 # =====================================================================================
-#  Pydantic 모델 정의 (3개 파일의 모델들을 모두 합침)
+#  Pydantic 모델 정의
 # =====================================================================================
 
 class RedesignReq(BaseModel):
@@ -45,17 +51,17 @@ class MenuReq(BaseModel):
 
 
 # =====================================================================================
-#  헬퍼 함수 정의 (3개 파일의 함수들을 모두 합침)
+#  헬퍼 함수 정의
 # =====================================================================================
 
 def get_base64_image(image_url: str) -> Optional[str]:
-    # ... (menu_redesigner.py의 함수)
     try:
         r = requests.get(image_url, timeout=10)
         r.raise_for_status()
         img = Image.open(io.BytesIO(r.content))
         buffered = io.BytesIO()
-        if img.mode in ('RGBA', 'P'): img = img.convert('RGB')
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
         img.save(buffered, format="JPEG")
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
     except Exception as e:
@@ -64,7 +70,6 @@ def get_base64_image(image_url: str) -> Optional[str]:
 
 
 def gpt_analyze_and_design(base64_img: str, request: str) -> dict:
-    # ... (menu_redesigner.py의 함수)
     system_prompt = f"""
     당신은 메뉴판을 재디자인하는 전문 '아트 디렉터'입니다. 사용자의 이미지와 요청을 분석하여, 새로운 메뉴판 디자인에 필요한 모든 요소를 구체적인 JSON 형식으로 제공해야 합니다.
     1. MenuItems: 이미지에서 모든 메뉴 항목(name, price)을 정확히 추출하세요.
@@ -77,7 +82,9 @@ def gpt_analyze_and_design(base64_img: str, request: str) -> dict:
     """
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini", temperature=0.7, response_format={"type": "json_object"},
+            model="gpt-4o-mini",
+            temperature=0.7,
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": [
@@ -93,14 +100,19 @@ def gpt_analyze_and_design(base64_img: str, request: str) -> dict:
 
 
 def generate_dalle_background(keywords: List[str], colors: List[str], size: Tuple[int, int]) -> Optional[Image.Image]:
-    # ... (menu_background.py의 함수)
     prompt = (
         f"A high-quality menu background image for a restaurant. Style inspired by: {', '.join(keywords)}. "
         f"Primary color palette: {', '.join(colors)}. The design must be artistic, abstract, minimalist, with plenty of empty space for text. "
         f"Avoid any text or letters. Pure background texture or pattern."
     )
     try:
-        response = client.images.generate(model="dall-e-3", prompt=prompt, size="1024x1792", quality="standard", n=1)
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1792",
+            quality="standard",
+            n=1
+        )
         res = requests.get(response.data[0].url)
         res.raise_for_status()
         return Image.open(io.BytesIO(res.content)).resize(size, Image.Resampling.LANCZOS)
@@ -110,16 +122,15 @@ def generate_dalle_background(keywords: List[str], colors: List[str], size: Tupl
 
 
 def get_google_font(style: str, size: int) -> ImageFont.ImageFont:
-    # ... (menu_board.py의 함수)
     def get_fallback_font():
         try:
             return ImageFont.truetype(DEFAULT_FONT_REGULAR, size)
         except IOError:
             return ImageFont.load_default()
 
-    if not GOOGLE_FONTS_API_KEY: return get_fallback_font()
+    if not GOOGLE_FONTS_API_KEY:
+        return get_fallback_font()
     try:
-        # (API 호출 로직은 이전과 동일하게 유지)
         global GOOGLE_FONTS_LIST_CACHE
         if not GOOGLE_FONTS_LIST_CACHE:
             resp = requests.get(
@@ -129,9 +140,11 @@ def get_google_font(style: str, size: int) -> ImageFont.ImageFont:
         style_kw = "serif" if "명조" in style else "handwriting" if "손글씨" in style else "sans-serif"
         candidates = [f for f in GOOGLE_FONTS_LIST_CACHE if
                       "korean" in f.get("subsets", []) and f.get("category") == style_kw]
-        if not candidates: raise ValueError("Font not found")
+        if not candidates:
+            raise ValueError("Font not found")
         font_url = random.choice(candidates)["files"].get("regular")
-        if not font_url: raise ValueError("URL not found")
+        if not font_url:
+            raise ValueError("URL not found")
         res = requests.get(font_url)
         res.raise_for_status()
         return ImageFont.truetype(io.BytesIO(res.content), size)
@@ -140,13 +153,11 @@ def get_google_font(style: str, size: int) -> ImageFont.ImageFont:
 
 
 def get_text_color(background: Image.Image) -> str:
-    # ... (menu_board.py의 함수)
     thumb = background.resize((50, 50)).convert("L")
     return "#333333" if np.mean(np.array(thumb)) > 128 else "#FFFFFF"
 
 
 def render_menu(req: MenuReq):
-    # ... (menu_board.py의 함수)
     w, h = 1080, 1528
     if req.background_url:
         try:
@@ -182,7 +193,7 @@ def render_menu(req: MenuReq):
 
 
 # =====================================================================================
-#  API 엔드포인트 정의 (3개 파일의 엔드포인트를 모두 합침)
+#  API 엔드포인트 정의
 # =====================================================================================
 
 @router.post("/redesign/menu-board", tags=["Menu Redesign"])
@@ -190,7 +201,8 @@ def redesign_menu_board_endpoint(req: RedesignReq):
     base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
 
     base64_img = get_base64_image(req.target_image_url)
-    if not base64_img: raise HTTPException(status_code=400, detail="이미지 URL 로드 실패")
+    if not base64_img:
+        raise HTTPException(status_code=400, detail="이미지 URL 로드 실패")
 
     design_data = gpt_analyze_and_design(base64_img, req.redesign_request)
     if not design_data or "MenuItems" not in design_data:
@@ -206,8 +218,10 @@ def redesign_menu_board_endpoint(req: RedesignReq):
         new_bg_url = bg_resp.json().get("background_url")
 
         menu_req_data = {
-            "title": design_data["NewTitle"], "items": design_data["MenuItems"],
-            "auto_desc": True, "background_url": new_bg_url,
+            "title": design_data["NewTitle"],
+            "items": design_data["MenuItems"],
+            "auto_desc": True,
+            "background_url": new_bg_url,
             "font_styles": design_data.get("FontStyles", []),
         }
         board_resp = requests.post(f"{base_url}/generate/menu-board", json=menu_req_data, timeout=20)
@@ -224,9 +238,10 @@ def make_menu_background_endpoint(req: BgReq):
     else:
         img = Image.new("RGB", req.size, "#F0F0F0")
 
-    if not img: raise HTTPException(status_code=500, detail="AI 배경 생성 실패")
+    if not img:
+        raise HTTPException(status_code=500, detail="AI 배경 생성 실패")
 
-    storage = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "outputs"))
+    storage = os.path.join(STORAGE_ROOT, "outputs")
     os.makedirs(storage, exist_ok=True)
     fname = f"bg_dalle_{random.randint(0, 999999):06}.png"
     img.save(os.path.join(storage, fname), "PNG")
@@ -238,7 +253,7 @@ def make_menu_background_endpoint(req: BgReq):
 @router.post("/generate/menu-board", tags=["Image Generation"])
 def generate_menu_endpoint(req: MenuReq):
     img = render_menu(req)
-    storage = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "outputs"))
+    storage = os.path.join(STORAGE_ROOT, "outputs")
     os.makedirs(storage, exist_ok=True)
     fname = f"menu_{random.randint(0, 999999):06}.png"
     output_path = os.path.join(storage, fname)
