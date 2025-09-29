@@ -253,9 +253,17 @@ def make_menu_background_endpoint(req: BgReq):
 @router.post("/generate/menu-board", tags=["Image Generation"])
 def generate_menu_endpoint(req: MenuReq):
     img = render_menu(req)
+
     storage = os.path.join(STORAGE_ROOT, "outputs")
     os.makedirs(storage, exist_ok=True)
+
     fname = f"menu_{random.randint(0, 999999):06}.png"
     output_path = os.path.join(storage, fname)
     img.save(output_path, "PNG")
-    return {"ok": True, "output_path": output_path}
+
+    # --- 수정 포인트: 내부 경로 대신 공개 URL 반환 ---
+    base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    public_url = f"{base_url}/static/outputs/{fname}"
+
+    return {"ok": True, "url": public_url}
+
