@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
-ROOT_DIR = Path(__file__).resolve().parents[2]  # .../hidden-leaf-village
+ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(dotenv_path=ROOT_DIR / ".env", override=True)
 
 app = FastAPI(
@@ -32,15 +32,10 @@ app.mount("/static", StaticFiles(directory=STORAGE_ROOT), name="static")
 # --- 라우터 ---
 from routes.image_from_copy import router as image_from_copy_router
 from routes.copy_from_image import router as copy_from_image_router
-from routes.menu_board import router as menu_board_router
 
-from routes.menu_redesigner import router as menu_redesigner_router
-from routes.menu_background import router as menu_background_router
-
+from routes.menu_service import router as menu_service_router
 
 # --- 라우터 포함 ---
 app.include_router(image_from_copy_router, prefix="/generate", tags=["image-from-copy"])
 app.include_router(copy_from_image_router, prefix="/generate", tags=["copy-from-image"])
-app.include_router(menu_board_router, prefix="/generate", tags=["menu-board"])
-app.include_router(menu_redesigner_router, prefix="/redesign", tags=["menu-redesign"])
-app.include_router(menu_background_router, prefix="/generate", tags=["menu-background"])
+app.include_router(menu_service_router)
