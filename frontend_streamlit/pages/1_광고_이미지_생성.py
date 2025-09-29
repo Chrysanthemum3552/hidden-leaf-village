@@ -21,21 +21,80 @@ st.set_page_config(page_title="🖼️ 광고 이미지 생성", page_icon="🖼
 st.markdown(
     """
 <style>
-.page { max-width: 1100px; margin: 0 auto; }
-.hero { text-align:center; padding: 8px 0 12px; }
-.hero h1 { margin: 0; font-size: clamp(24px, 4.2vw, 34px); letter-spacing: -0.02em; }
-.hero p { margin: 6px 0 0; opacity:.85; }
+.page { max-width: 1100px; margin: 0 auto; padding-bottom: 40px; }
 
-.card { background: rgba(17,24,39,0.03); border: 1px solid rgba(17,24,39,0.08);
-        border-radius: 14px; padding: 18px; }
-.hint { font-size: 13px; line-height: 1.55; opacity: .9; margin: 6px 0 0; }
+/* hero */
+.hero { text-align:center; padding: 18px 0 28px; }
+.hero h1 { margin:0; font-size: clamp(26px, 4.4vw, 40px); font-weight:800;
+           background:linear-gradient(90deg,#2563eb,#9333ea);
+           -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.hero p { margin:8px 0 0; opacity:.85; font-size:15px; }
 
-hr.sep { border: none; height: 1px; background: rgba(17,24,39,.08); margin: 12px 0 16px; }
+/* card */
+.card { background: rgba(255,255,255,0.6); border:1px solid rgba(17,24,39,0.08);
+        border-radius:16px; padding:24px; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
 
-.result-img { border-radius: 12px; box-shadow: 0 8px 22px rgba(0,0,0,.12); }
+/* button */
+.stButton>button { 
+    background:linear-gradient(90deg,#2563eb,#9333ea);
+    color:#fff; font-weight:600; border-radius:12px; padding:10px 0;
+    transition:all 0.2s ease;
+}
+.stButton>button:hover { 
+    background:linear-gradient(90deg,#1d4ed8,#7e22ce);
+    transform:translateY(-2px);
+}
 
-.small { font-size: 12.5px; opacity: .85; }
+/* help 버튼 */
+.stButton > button[kind="secondary"] {
+  margin: 8px 0 14px 0;
+  padding: 6px 14px;
+  border-radius: 999px; /* 둥글게 */
+  font-weight: 800;
+  color: #0f172a;
+  background: 
+    linear-gradient(#fff, #fff) padding-box, /* 안쪽 배경 */
+    linear-gradient(90deg, #2563eb, #9333ea) border-box; /* 바깥 테두리 */
+  border: 3px solid transparent; /* 투명 border로 공간 확보 */
+  box-shadow: 0 6px 14px rgba(15,23,42,.08);
+  transition: .15s;
+}
+
+.stButton > button[kind="secondary"]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(15,23,42,.14);
+}
+
+
+
+
+/* help box */
+.hint { font-size:14px; line-height:1.55; margin:10px 0;
+        background:#fff8eb; border:1px solid #fcd34d;
+        border-radius:12px; padding:14px 16px; box-shadow:0 4px 14px rgba(0,0,0,.08); }
+
+/* result */
+.result-img { border-radius:14px; box-shadow:0 10px 24px rgba(0,0,0,.15); }
+
+/* archive btn */
+.archive-btn {
+  position:fixed; top:36px; right:32px;
+  padding:12px 20px; border-radius:999px; line-height:1;
+  background:#ffffff; color:#0f172a; font-weight:800;
+  text-decoration:none; border:3px solid #F59E0B;
+  box-shadow:0 8px 20px rgba(15,23,42,.10), inset 0 0 0 2px #fff;
+  z-index:2147483647; transition:.15s;
+}
+.archive-btn:hover { transform:translateY(-2px);
+  box-shadow:0 12px 28px rgba(15,23,42,.16), inset 0 0 0 2px #fff; }
+
+/* 제거: 라벨 배경 박스 */
+.stTextArea label, .stNumberInput label, .stTextInput label {
+  background: transparent !important;
+  padding: 0 !important;
+}
 </style>
+<a class="archive-btn" href="/?page=4_%EB%82%B4%EA%B0%80_%EC%83%9D%EC%84%B1%ED%95%9C_%EC%9D%B4%EB%AF%B8%EC%A7%80">📂 보관함</a>
 """,
     unsafe_allow_html=True,
 )
@@ -47,8 +106,8 @@ st.markdown(
     """
 <div class="page">
   <div class="hero">
-    <h1>🖼️ 광고 이미지 생성 (글 → 이미지)</h1>
-    <p>문구를 입력하면 백엔드가 이미지를 생성하고, 결과를 <b>data/outputs</b>에도 저장합니다.</p>
+    <h1>광고 이미지 생성</h1>
+    <p>문구를 입력하면 그에 맞는 이미지를 생성하고, 결과를 우측 상단 "📂보관함"에 저장합니다.</p>
   </div>
 </div>
 """,
@@ -59,12 +118,6 @@ st.markdown(
 # Helpers
 # ----------------------------
 def guess_public_url(output_path: str) -> str:
-    """
-    백엔드가 반환한 output_path가
-    - http(s)://...  → 그대로 사용
-    - /static/...     → BACKEND + 해당 경로
-    - 로컬파일 경로   → 파일명만 추출해 BACKEND/static/outputs/<name> 으로 가정
-    """
     if not output_path:
         return ""
     p = output_path.strip()
@@ -77,86 +130,66 @@ def guess_public_url(output_path: str) -> str:
     return f"{BACKEND}/static/outputs/{name}"
 
 def save_to_frontend_outputs(public_url: str) -> Path:
-    """
-    public_url에서 이미지를 GET하여 프로젝트 루트의 data/outputs 에 저장.
-    현재 파일이 pages/ 아래에 있다고 가정하여 상위 2단계를 프로젝트 루트로 사용.
-    """
-    # pages/xxx.py -> frontend_streamlit/pages -> 프로젝트 루트의 상위 2단계
     project_root = Path(__file__).resolve().parents[2]
     out_dir = project_root / "data" / "outputs"
     out_dir.mkdir(parents=True, exist_ok=True)
-
     parsed = urlparse(public_url)
     name = os.path.basename(parsed.path) or f"gen_{uuid.uuid4().hex}.png"
-    if "." not in name:
-        name += ".png"
-
+    if "." not in name: name += ".png"
     save_path = out_dir / name
-    resp = requests.get(public_url, timeout=120)
-    resp.raise_for_status()
-    with open(save_path, "wb") as f:
-        f.write(resp.content)
+    resp = requests.get(public_url, timeout=120); resp.raise_for_status()
+    with open(save_path, "wb") as f: f.write(resp.content)
     return save_path
 
 # ----------------------------
 # Form UI
 # ----------------------------
-st.markdown('<div class="page">', unsafe_allow_html=True)
-st.markdown('<div class="card">', unsafe_allow_html=True)
+st.markdown('<div class="page"><div class="card">', unsafe_allow_html=True)
 
-show_help = st.checkbox("설명 보기", value=False)
+# 도움말 버튼을 위로 이동
+if st.button("💡 도움말 보기", key="help", use_container_width=False):
+    st.session_state["show_help"] = not st.session_state.get("show_help", False)
 
-text = st.text_area(
-    "광고 문구를 입력하세요",
-    height=140,
-    placeholder="예) 신메뉴 바질페스토 파스타 런칭! 2시~5시 타임세일, 오늘만 20% 할인",
-)
-if show_help:
+if st.session_state.get("show_help", False):
     st.markdown(
         """
 <div class="hint">
-<strong>어떻게 쓰면 좋을까?</strong><br>
-- 핵심: 제품/서비스, 혜택(가격·할인·증정), 기간/장소, CTA(예: 지금 주문/예약)<br>
-- 톤: 친근·프리미엄·미니멀 등 원하는 분위기를 명시하면 좋아요.<br>
-- 예시:<br>
-&nbsp;&nbsp;• <i>“주말 한정 수제버거 세트 30% OFF, 오후 3~6시 해피아워, 지금 주문!”</i><br>
-&nbsp;&nbsp;• <i>“비건 초콜릿 케이크 런칭, 첫 구매 1+1 쿠폰 제공, 오늘만!”</i>
+<b>무엇을 입력하면 좋을까?</b><br>
+✔ 제품/서비스 이름<br>
+✔ 혜택 (가격·할인·증정)<br>
+✔ 기간/장소<br>
+✔ CTA (예: 지금 주문/예약)<br><br>
+
+<b>예시</b><br>
+- “주말 한정 수제버거 세트 30% OFF, 오후 3~6시 해피아워, 지금 주문!”<br>
+- “비건 초콜릿 케이크 런칭, 첫 구매 1+1 쿠폰 제공, 오늘만!”<br><br>
+
+<b>팁</b><br>
+- 원하는 분위기를 "🎨 스타일(선택)"란에 적어주세요 (예: 귀여운·여름 분위기·빈티지).<br>
+- 짧고 간결한 문장이 더 효과적입니다.
 </div>
 """,
         unsafe_allow_html=True,
     )
 
+# 입력 라벨을 HTML로 직접 작성 → emoji 표시 문제 해결
+st.markdown("### ✍️ 광고 문구 입력", unsafe_allow_html=True)
+text = st.text_area(
+    label="",
+    height=140,
+    placeholder="예) 신메뉴 바질페스토 파스타 런칭! 2시~5시 타임세일, 오늘만 20% 할인",
+    label_visibility="collapsed"
+)
+
 col1, col2 = st.columns(2)
 with col1:
-    style = st.text_input("스타일(선택)", placeholder="예) vintage, minimal, neon")
-    if show_help:
-        st.markdown(
-            """
-<div class="hint">
-- 쉼표로 여러 스타일 지정 가능 (예: <i>“vintage, minimal, film grain”</i>)<br>
-- 키워드 예: minimal, neon, retro, vintage, poster, photo-realistic, 3D, Korean poster 등
-</div>
-""",
-            unsafe_allow_html=True,
-        )
+    style = st.text_input("🎨 스타일(선택)", placeholder="예) 빈티지, 미니멀, 네온, 시원함")
 with col2:
-    seed = st.number_input("seed(선택)", value=0, step=1, min_value=0)
-    if show_help:
-        st.markdown(
-            """
-<div class="hint">
-- 같은 입력으로 동일한 결과를 원하면 <b>seed</b>를 고정하세요.<br>
-- <i>0</i>은 무작위 취급(아래 요청에서 <code>None</code>으로 변환).
-</div>
-""",
-            unsafe_allow_html=True,
-        )
+    seed = st.number_input("🔢 seed(선택)", value=0, step=1, min_value=0)
 
-st.markdown('<hr class="sep"/>', unsafe_allow_html=True)
 generate = st.button("✨ 이미지 생성", use_container_width=True, type="primary")
 
-st.markdown("</div>", unsafe_allow_html=True)  # .card
-st.markdown("</div>", unsafe_allow_html=True)  # .page
+st.markdown("</div></div>", unsafe_allow_html=True)
 
 # ----------------------------
 # Action
@@ -165,49 +198,28 @@ if generate:
     if not text.strip():
         st.warning("광고 문구를 입력해주세요.")
     else:
-        payload = {
-            "text": text.strip(),
-            "style": (style.strip() or None),
-            "seed": (int(seed) if int(seed) != 0 else None),
-        }
+        payload = {"text": text.strip(),
+                   "style": (style.strip() or None),
+                   "seed": (int(seed) if int(seed) != 0 else None)}
         with st.spinner("이미지 생성 중..."):
             try:
-                resp = requests.post(
-                    f"{BACKEND}/generate/image-from-copy",
-                    json=payload,
-                    timeout=300,
-                )
+                resp = requests.post(f"{BACKEND}/generate/image-from-copy",
+                                     json=payload, timeout=300)
             except Exception as e:
                 st.error(f"백엔드 요청 실패: {e}")
             else:
                 if not resp.ok:
                     st.error(f"실패: {resp.status_code} - {resp.text}")
                 else:
-                    data = {}
-                    try:
-                        data = resp.json()
-                    except Exception:
-                        st.error("응답 파싱 실패(JSON 아님)")
-                        st.stop()
-
-                    # 백엔드가 반환한 경로 추출
+                    try: data = resp.json()
+                    except: st.error("응답 파싱 실패"); st.stop()
                     output_path = data.get("output_path") or data.get("path") or ""
                     public_url = guess_public_url(output_path)
-                    if not public_url:
-                        st.error("백엔드 응답에서 이미지 경로를 확인할 수 없습니다.")
-                        st.stop()
-
-                    # 결과 표시
-                    st.success("완료! 아래 이미지를 확인하세요.")
-                    st.image(public_url, use_column_width=True, caption="생성 결과")
-
-                    # data/outputs 에 저장
+                    if not public_url: st.error("이미지 경로 확인 불가"); st.stop()
+                    st.success("완료! 🎉 생성된 이미지를 확인하세요.")
+                    st.image(public_url, use_container_width=True, caption="생성 결과")
                     try:
                         saved_path = save_to_frontend_outputs(public_url)
-                        st.info("프론트엔드 저장 경로")
-                        st.code(str(saved_path), language="text")
-                        st.caption(
-                            "※ 프로젝트 루트 기준: data/outputs/ 에 복사 저장되었습니다."
-                        )
+                        st.caption(f"💾 저장됨: data/outputs/{os.path.basename(saved_path)}")
                     except Exception as e:
-                        st.warning(f"로컬 저장 실패(무시 가능): {e}")
+                        st.warning(f"로컬 저장 실패: {e}")

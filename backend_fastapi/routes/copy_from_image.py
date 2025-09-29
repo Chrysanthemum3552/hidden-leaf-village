@@ -20,7 +20,7 @@ for _p in (_HERE.parents[2]/".env", _HERE.parents[1]/".env", _HERE.parent/".env"
     except: pass
 
 OPENAI_BASE = os.getenv("TEAM_GPT_BASE_URL","https://api.openai.com/v1").rstrip("/")
-OPENAI_KEY  = os.getenv("TEAM_GPT_API_KEY")
+OPENAI_KEY  = os.getenv("OPENAI_API_KEY")
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL","http://localhost:8000").rstrip("/")
 STORAGE_ROOT = os.getenv("STORAGE_ROOT", os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..","data")))
 UPLOAD_DIR, OUTPUT_DIR = os.path.join(STORAGE_ROOT,"uploads"), os.path.join(STORAGE_ROOT,"outputs")

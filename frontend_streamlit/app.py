@@ -190,20 +190,20 @@ img {
   margin-top:48px;
 }
 .section-inner{
-  max-width: calc(400px * 3 + 16px * 2); /* 1232px */
+  max-width: calc(400px * 3 + 16px * 2);
   margin: 0 auto;
 }
 
 
 /* 제목은 계속 왼쪽 */
 .section-title{
-  font-family: var(--font-title); /* 타이틀 전용 폰트 */
-  font-weight: 800;               /* 굵게 */
-  font-size: 25px; /* 더 크게 */
+  font-family: var(--font-title); 
+  font-weight: 800;              
+  font-size: 25px; 
   line-height: 1.2;
   color: var(--ink-1);
-  text-align: left;               /* 정렬은 유지 */
-  margin: 18px 0 10px 4px;        /* 여백은 취향대로 */
+  text-align: left;              
+  margin: 18px 0 10px 4px;       
   letter-spacing: -0.2px;
 }
 .section-title::after {
