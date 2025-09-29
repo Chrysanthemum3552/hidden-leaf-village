@@ -6,7 +6,7 @@ import os, io, requests, random, numpy as np
 
 from openai import OpenAI
 
-client = OpenAI(api_key=os.getenv("TEAM_GPT_API_KEY"))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 router = APIRouter()
 
 FONT_CACHE = {}
