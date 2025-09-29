@@ -17,7 +17,6 @@ GOOGLE_FONTS_LIST_CACHE = None
 FONT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fonts"))
 DEFAULT_FONT_REGULAR = os.path.join(FONT_DIR, "NotoSansKR-Regular.ttf")
 
-
 # =====================================================================================
 #  Pydantic 모델 정의 (3개 파일의 모델들을 모두 합침)
 # =====================================================================================
