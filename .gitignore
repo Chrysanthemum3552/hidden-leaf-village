@@ -7,3 +7,6 @@ backend_fastapi/data/
 backend_fastapi/data/uploads/
 backend_fastapi/data/outputs/
 backend_fastapi/routes/env
+
+ComfyUI/
+models/

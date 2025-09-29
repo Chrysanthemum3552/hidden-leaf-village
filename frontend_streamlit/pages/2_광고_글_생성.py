@@ -127,9 +127,9 @@ if st.button("광고 글 생성", use_container_width=False):
 
                     content = fetch_bytes(img_url) if img_url else None
                     if content:
-                        st.image(content, caption="업로드 이미지", use_container_width=True)
+                        st.image(content, caption="업로드 이미지", use_column_width=True)
                     elif img_path and os.path.exists(img_path):
-                        st.image(img_path, caption="업로드 이미지(로컬)", use_container_width=True)
+                        st.image(img_path, caption="업로드 이미지(로컬)", use_column_width=True)
                     else:
                         st.info("이미지를 자동 표시하지 못했어요. 아래 링크로 직접 열어보세요.")
                         if img_url:
