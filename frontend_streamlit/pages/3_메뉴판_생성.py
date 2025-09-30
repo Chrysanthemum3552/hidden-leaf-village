@@ -8,7 +8,12 @@ from dotenv import load_dotenv
 # ----------------------------
 load_dotenv()
 # 로컬 개발 기본값은 localhost:8000, 배포 시 .env의 BACKEND_URL로 덮어쓰기
-BACKEND = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+BACKEND = (
+    os.getenv("BACKEND_URL")
+    or os.getenv("BACKEND_PUBLIC_URL")
+    or "http://localhost:8000"
+).rstrip("/")
+
 
 # ----------------------------
 # 페이지 기본 설정
