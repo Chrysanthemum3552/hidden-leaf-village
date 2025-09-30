@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 # 환경 변수 로드
 # ----------------------------
 load_dotenv()
-BACKEND = os.getenv("BACKEND_URL", "https://hidden-leaf-village.onrender.com")
+# 로컬 개발 기본값은 localhost:8000, 배포 시 .env의 BACKEND_URL로 덮어쓰기
+BACKEND = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 # ----------------------------
 # 페이지 기본 설정
@@ -112,11 +113,15 @@ st.markdown(
 # ----------------------------
 st.markdown('<div class="page"><div class="card">', unsafe_allow_html=True)
 
+# 도움말 토글 초기화
+if "show_help_menu" not in st.session_state:
+    st.session_state["show_help_menu"] = False
+
 # 도움말 버튼
 if st.button("💡 도움말 보기", key="help_menu", use_container_width=False):
-    st.session_state["show_help_menu"] = not st.session_state.get("show_help_menu", False)
+    st.session_state["show_help_menu"] = not st.session_state["show_help_menu"]
 
-if st.session_state.get("show_help_menu", False):
+if st.session_state["show_help_menu"]:
     st.markdown(
         """
 <div class="hint">
@@ -150,37 +155,39 @@ if "menu_items" not in st.session_state:
     ]
 
 def render_items():
-    for i, it in enumerate(st.session_state["menu_items"]):
+    # enumerate 중간 삭제 안정성을 위해 인덱스 리스트 사용
+    idxs = list(range(len(st.session_state["menu_items"])))
+    for i in idxs:
+        it = st.session_state["menu_items"][i]
         cols = st.columns([4, 2, 4, 1])
         it["name"] = cols[0].text_input(
-            "이름", 
-            value=it["name"], 
-            key=f"name_{i}", 
+            "이름",
+            value=it.get("name", ""),
+            key=f"name_{i}",
             placeholder="새 메뉴 입력"
         )
-        it["price"] = cols[1].number_input("가격", value=int(it["price"]), step=100, key=f"price_{i}")
+        it["price"] = cols[1].number_input(
+            "가격",
+            value=int(it.get("price", 0) or 0),
+            step=100,
+            key=f"price_{i}"
+        )
         it["desc"] = cols[2].text_input(
-            "설명(선택)", 
-            value=it.get("desc", ""), 
-            key=f"desc_{i}", 
+            "설명(선택)",
+            value=it.get("desc", ""),
+            key=f"desc_{i}",
             placeholder="예: Hot/Iced, 카페인/디카페인, 연하게/진하게 등등"
         )
         if cols[3].button("삭제", key=f"del_{i}"):
             st.session_state["menu_items"].pop(i)
-            try:
-                st.rerun()
-            except Exception:
-                st.experimental_rerun()
+            st.rerun()
 
 render_items()
 
 # 메뉴 추가 버튼
 if st.button("➕ 메뉴 추가", use_container_width=True, type="secondary"):
     st.session_state["menu_items"].append({"name": "", "price": 0, "desc": ""})
-    try:
-        st.rerun()
-    except Exception:
-        st.experimental_rerun()
+    st.rerun()
 
 # 메뉴판 생성 버튼
 generate = st.button("✨ 메뉴판 생성", use_container_width=True, type="primary")
@@ -204,13 +211,26 @@ if generate:
 
             st.success("완료! 🎉 생성된 메뉴판을 확인하세요.")
 
-            # 반드시 file_url만 사용
-            img_url = data.get("file_url")
-            if img_url and img_url.startswith("http"):
-                st.image(img_url, caption="생성된 메뉴판", use_container_width=True)
-                st.code(img_url)
-            else:
+            # 다양한 키를 허용: image_url → url → file_url → path(상대경로) 순
+            img_url = data.get("image_url") or data.get("url") or data.get("file_url")
+
+            # path만 준 경우(예: "/static/outputs/xxx.png") BACKEND와 합쳐서 절대 URL로
+            if not img_url:
+                path = data.get("path")
+                if path:
+                    img_url = path if path.startswith("http") else f"{BACKEND}{path if path.startswith('/') else '/' + path}"
+
+            if not img_url:
                 st.error(f"응답에 올바른 이미지 URL이 없습니다.\n{data}")
+            else:
+                st.image(img_url, caption="생성된 메뉴판", use_container_width=True)
+                st.code(img_url)  # 디버깅용으로도 유용
 
         except requests.RequestException as e:
-            st.error(f"실패: {e}\n응답: {getattr(e, 'response', None) and getattr(e.response, 'text', '')}")
+            resp_text = ""
+            if getattr(e, "response", None) is not None:
+                try:
+                    resp_text = e.response.text
+                except Exception:
+                    resp_text = str(e)
+            st.error(f"실패: {e}\n응답: {resp_text}")
