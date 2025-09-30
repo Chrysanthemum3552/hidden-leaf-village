@@ -50,7 +50,7 @@ load_dotenv(dotenv_path=ROOT_DIR / ".env", override=True)
 
 router = APIRouter()
 
-BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "https://hidden-leaf-village.onrender.com").rstrip("/")
 
 STORAGE_ROOT = os.getenv(
     "STORAGE_ROOT",
@@ -208,7 +208,104 @@ English:"""
             
         except Exception as e:
             print(f"번역 오류: {e}, 원문 사용")
-            return text  # 번역 실패시 원문 반환
+            return text
+    
+    def classify_person(self, english: str) -> bool:
+        """사람 여부 판단"""
+        if not self.loaded:
+            self.load_models()
+        
+        prompt = f"""Answer only YES or NO.
+
+Text: {english}
+
+Question: Does this text explicitly contain any human-related words 
+(such as man, woman, person, people, child, boy, girl, baby, face, portrait, model, actor, actress, selfie)?
+
+Rules:
+- Answer YES only if at least one of these words appears in the text.
+- If none of these words appear, you MUST answer NO.
+- Do not assume or guess implied humans (e.g., someone riding a bicycle).
+- Do not use context or imagination. Base your answer only on explicit words in the text.
+
+Answer:"""
+        
+        try:
+            response = self.translator(
+                prompt,
+                max_tokens=5,
+                temperature=0.0,
+                stop=["\n"]
+            )
+            answer = response['choices'][0]['text'].strip().lower()
+            result = "yes" in answer
+            print(f"  인물 판단: {result}")
+            return result
+        except Exception as e:
+            print(f"  인물 판단 오류: {e}")
+            return False
+    
+    def classify_object(self, english: str) -> bool:
+        """사물 여부 판단"""
+        if not self.loaded:
+            self.load_models()
+        
+        prompt = f"""Answer with only YES or NO.
+
+Text: {english}
+
+Rule:
+- Answer YES only if the text explicitly mentions humans or human-related words.
+- Do NOT infer implied presence.
+- If unclear, answer NO.
+
+Answer:"""
+        
+        try:
+            response = self.translator(
+                prompt,
+                max_tokens=5,
+                temperature=0.0,
+                stop=["\n"]
+            )
+            answer = response['choices'][0]['text'].strip().lower()
+            result = "yes" in answer
+            print(f"  사물 판단: {result}")
+            return result
+        except Exception as e:
+            print(f"  사물 판단 오류: {e}")
+            return False
+    
+    def enhance_prompt(self, text: str) -> str:
+        """프롬프트 강화: 번역 + 분류 + 키워드 추가"""
+        if not self.loaded:
+            self.load_models()
+        
+        print("\n=== 프롬프트 강화 시작 ===")
+        
+        # 1. 번역
+        english = self.translate_korean(text)
+        
+        # 2. 분류
+        print("콘텐츠 분류 중...")
+        has_person = self.classify_person(english)
+        has_object = self.classify_object(english)
+        
+        # 3. 키워드 강화
+        enhanced = f"{english}, sharp, clean composition, high quality"
+        
+        if has_person:
+            enhanced += ", portrait, detailed face, natural skin texture"
+            print("  인물 키워드 추가")
+        
+        if has_object:
+            enhanced += ", sharp edges"
+            print("  사물 키워드 추가")
+        
+        print(f"최종 강화 프롬프트: {enhanced}")
+        print("=== 프롬프트 강화 완료 ===\n")
+        
+        return enhanced
     
     def generate_image_with_comfyui(self, prompt: str, style: Optional[str] = None, seed: Optional[int] = None) -> bytes:
         """ComfyUI를 통한 실제 이미지 생성"""
@@ -455,7 +552,7 @@ def _validate_request(req: CopyToImageReq) -> CopyToImageReq:
 
 @router.post("/image-from-copy")
 def image_from_copy(req: CopyToImageReq):
-    """텍스트로부터 이미지 생성 - ComfyUI 연동"""
+    """텍스트로부터 이미지 생성 - 프롬프트 강화 적용"""
     
     # 기본 요청 검증
     validated_req = _validate_request(req)
@@ -465,16 +562,16 @@ def image_from_copy(req: CopyToImageReq):
     try:
         pipeline = _get_local_pipeline()
         
-        # 1. 번역
-        translation_start = time.time()
-        english_text = pipeline.translate_korean(validated_req.text)
-        translation_time = time.time() - translation_start
+        # 1. 프롬프트 강화 (번역 + 분류 + 키워드 추가)
+        enhancement_start = time.time()
+        enhanced_prompt = pipeline.enhance_prompt(validated_req.text)
+        enhancement_time = time.time() - enhancement_start
         
-        # 2. 스타일 적용
+        # 2. 스타일 적용 (선택사항)
         if validated_req.style:
-            final_prompt = f"{english_text} in {validated_req.style} style"
+            final_prompt = f"{enhanced_prompt} in {validated_req.style} style"
         else:
-            final_prompt = f"High-quality advertising image: {english_text}"
+            final_prompt = enhanced_prompt
         
         # 3. ComfyUI로 실제 이미지 생성
         generation_start = time.time()
@@ -503,14 +600,14 @@ def image_from_copy(req: CopyToImageReq):
             "file_url": file_url,
             "metadata": {
                 "original_text": validated_req.text,
-                "english_prompt": english_text,
+                "enhanced_prompt": enhanced_prompt,
                 "final_prompt": final_prompt,
                 "style": validated_req.style,
                 "seed": validated_req.seed,
                 "model_used": "ComfyUI + Local Translation",
                 "demo_mode": False,
                 "timing": {
-                    "translation_time": round(translation_time, 2),
+                    "enhancement_time": round(enhancement_time, 2),
                     "generation_time": round(generation_time, 2),
                     "total_time": round(total_time, 2)
                 }
@@ -587,6 +684,11 @@ def model_status():
         "dependencies": {
             "gguf_available": GGUF_AVAILABLE,
             "models_dir": str(MODELS_DIR)
+        },
+        "prompt_enhancement": {
+            "base_quality": "sharp, clean composition, high quality",
+            "person_keywords": "portrait, detailed face, natural skin texture",
+            "object_keywords": "product photo, centered object, sharp edges"
         },
         "status": "ready" if all_models_ready else "not_ready",
         "message": "모든 시스템 준비됨" if all_models_ready else "설정 필요"
