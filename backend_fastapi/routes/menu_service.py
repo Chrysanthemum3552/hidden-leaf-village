@@ -395,3 +395,33 @@ def generate_menu_endpoint(req: MenuReq):
     base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
     public_url = f"{base_url}/static/outputs/{fname}"
     return {"ok": True, "url": public_url}
+
+@router.post("/menu-board", tags=["Image Generation"])
+def generate_menu_endpoint(req: MenuReq):
+    try:
+        img = render_menu(req)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"렌더링 실패: {e}")
+
+    storage = os.path.join(STORAGE_ROOT, "outputs")
+    os.makedirs(storage, exist_ok=True)
+
+    fname = f"menu_{random.randint(0, 999999):06}.png"
+    output_path = os.path.join(storage, fname)
+    try:
+        img.save(output_path, "PNG", optimize=True)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"이미지 저장 실패: {e}")
+
+    base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    public_url = f"{base_url}/static/outputs/{fname}"
+
+    return {
+        "ok": True,
+        "url": public_url,                 # 기존 키 유지
+        "image_url": public_url,           # 프론트가 이 키를 볼 가능성이 큼
+        "path": f"/static/outputs/{fname}",# 디버깅/로깅용(선택)
+        "filename": fname                  
+    }
+
+
