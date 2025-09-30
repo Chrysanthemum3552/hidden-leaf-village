@@ -12,16 +12,22 @@ from dotenv import load_dotenv, find_dotenv
 router = APIRouter()
 ALLOWED_EXTS = {"jpg","jpeg","png","webp"}
 
-# .env
-_HERE = Path(__file__).resolve()
-for _p in (_HERE.parents[2]/".env", _HERE.parents[1]/".env", _HERE.parent/".env", Path(find_dotenv())):
-    try:
-        if _p and _p.exists(): load_dotenv(dotenv_path=_p, override=True); break
-    except: pass
+# .env: 개발에서만 읽고(override 금지), 운영(production)에서는 무시
+IS_PROD = os.getenv("ENV", "production").lower() in ("prod", "production")
+if not IS_PROD:
+    _HERE = Path(__file__).resolve()
+    for _p in (_HERE.parents[2]/".env", _HERE.parents[1]/".env", _HERE.parent/".env", Path(find_dotenv())):
+        try:
+            if _p and _p.exists():
+                # 기존 override=True → False 로 바꿔 ENV 값이 우선되게
+                load_dotenv(dotenv_path=_p, override=False)
+                break
+        except:
+            pass
 
 OPENAI_BASE = os.getenv("TEAM_GPT_BASE_URL","https://api.openai.com/v1").rstrip("/")
 OPENAI_KEY  = os.getenv("OPENAI_API_KEY")
-BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL","http://localhost:8000").rstrip("/")
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL","https://hidden-leaf-village.onrender.com").rstrip("/")
 STORAGE_ROOT = os.getenv("STORAGE_ROOT", os.path.abspath(os.path.join(os.path.dirname(__file__), "..","..","data")))
 UPLOAD_DIR, OUTPUT_DIR = os.path.join(STORAGE_ROOT,"uploads"), os.path.join(STORAGE_ROOT,"outputs")
 os.makedirs(UPLOAD_DIR, exist_ok=True); os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -29,13 +35,35 @@ MODEL_VISION  = os.getenv("OPENAI_VISION_MODEL","gpt-4o-mini")
 MODEL_FALLBACK= os.getenv("OPENAI_VISION_FALLBACK_MODEL","gpt-4o")
 MAX_FILE_MB   = float(os.getenv("MAX_FILE_MB","15"))
 
+# (중요) OpenAI BASE가 백엔드 자신을 가리키면 즉시 차단
+def _same_host(a, b):
+    import re, urllib.parse
+    def host(u):
+        if not u: return ""
+        if not re.match(r"^https?://", u): u = "http://" + u
+        return urllib.parse.urlparse(u).hostname or ""
+    return host(a) and host(a) == host(b)
+
+if _same_host(OPENAI_BASE, BACKEND_PUBLIC_URL):
+    raise RuntimeError(
+        f"Misconfigured TEAM_GPT_BASE_URL={OPENAI_BASE} (points to backend). "
+        "Use https://api.openai.com/v1 or unset TEAM_GPT_BASE_URL."
+    )
+
 def _now_str(): return datetime.now().strftime("%Y%m%d_%H%M%S")
+
 def _headers():
     if not OPENAI_KEY: raise HTTPException(500,"OpenAI API key missing")
     h={"Authorization":f"Bearer {OPENAI_KEY}","Content-Type":"application/json"}
-    if os.getenv("OPENAI_ORG_ID"): h["OpenAI-Organization"]=os.getenv("OPENAI_ORG_ID")
-    if os.getenv("OPENAI_PROJECT_ID"): h["OpenAI-Project"]=os.getenv("OPENAI_PROJECT_ID")
+    # org_/proj_ 형식일 때만 헤더에 포함 (임의 문자열이면 인증 깨짐 방지)
+    org = (os.getenv("OPENAI_ORG_ID") or "").strip()
+    if org.startswith("org_"):
+        h["OpenAI-Organization"] = org
+    proj = (os.getenv("OPENAI_PROJECT_ID") or "").strip()
+    if proj.startswith("proj_"):
+        h["OpenAI-Project"] = proj
     return h
+
 def _session():
     s=requests.Session(); ad=HTTPAdapter(max_retries=Retry(total=2,backoff_factor=.5,status_forcelist=[429,500,502,503,504],allowed_methods=frozenset(["POST"])))
     s.mount("https://",ad); s.mount("http://",ad); return s
@@ -46,16 +74,16 @@ def _smart_trim(t,l):
     cut=re.sub(r"[\s,.:;/\-–—_]+?$","",t[:l])
     return cut if re.search(r"[.!?…]$",cut) else cut+"..."
 def _norm_tags(tags,n,allow_emoji):
-    out=[]; 
+    out=[]
     for t in (tags or [])[:max(0,n)]:
-        t=re.sub(r"^#+","",(t or "").strip()); 
+        t=re.sub(r"^#+","",(t or "").strip())
         if not allow_emoji: t=re.sub(r"[^\w가-힣0-9_]+","",t)
         if t: out.append("#"+t)
     uniq=[]; seen=set()
     for t in out:
         if t not in seen: uniq.append(t); seen.add(t)
     return uniq
-def _contains_banned(t,b): 
+def _contains_banned(t,b):
     t=t or ""; return any(x.lower() in t.lower() for x in (b or []))
 def _platform_hint(p):
     return {"instagram":"인스타그램은 짧고 강렬, 해시태그 친화적.",
@@ -208,7 +236,7 @@ def _involvement(ocr,cat,price,override):
     return "high" if sc>=1 else "low"
 def _jaccard(a,b,n=2):
     def grams(s): s=re.sub(r"\s+"," ",(s or "").strip()); return {s[i:i+n] for i in range(max(0,len(s)-n+1))}
-    A,B=grams(a),grams(b); 
+    A,B=grams(a),grams(b);
     return 0.0 if not A or not B else len(A & B)/len(A | B)
 def _diverse(scored,k=3,sim=0.6):
     picked=[]
@@ -345,9 +373,23 @@ async def copy_from_image(
                  ],
                  "temperature":temp,"response_format":{"type":"json_object"}}
         s=_session()
+
+        # --- 디버그: 1차 호출 ---
+        print("[openai-call] url   =", url)
+        print("[openai-call] model =", payload["model"])
         r=s.post(url,headers=_headers(),json=payload,timeout=(10,120))
+        print("[openai-call] status=", r.status_code)
+        try: print("[openai-call] body  =", (r.text or "")[:1000])
+        except: pass
+
         if r.status_code>=400 and payload["model"]!=MODEL_FALLBACK:
-            payload["model"]=MODEL_FALLBACK; r=s.post(url,headers=_headers(),json=payload,timeout=(10,120))
+            payload["model"]=MODEL_FALLBACK
+            print("[openai-call] fallback ->", payload["model"])
+            r=s.post(url,headers=_headers(),json=payload,timeout=(10,120))
+            print("[openai-call] status=", r.status_code)
+            try: print("[openai-call] body  =", (r.text or "")[:1000])
+            except: pass
+
         r.raise_for_status()
 
         data=r.json()
@@ -397,9 +439,22 @@ async def copy_from_image(
                     {"role":"user","content":json.dumps(best,ensure_ascii=False)},
                 ],
                 "temperature":0.3,"response_format":{"type":"json_object"}}
+            # --- 디버그: 2차 편집 호출 ---
+            print("[openai-call] url   =", url)
+            print("[openai-call] model =", refine_payload["model"])
             rr=s.post(url,headers=_headers(),json=refine_payload,timeout=(10,120))
+            print("[openai-call] status=", rr.status_code)
+            try: print("[openai-call] body  =", (rr.text or "")[:1000])
+            except: pass
+
             if rr.status_code>=400 and refine_payload["model"]!=MODEL_FALLBACK:
-                refine_payload["model"]=MODEL_FALLBACK; rr=s.post(url,headers=_headers(),json=refine_payload,timeout=(10,120))
+                refine_payload["model"]=MODEL_FALLBACK
+                print("[openai-call] fallback ->", refine_payload["model"])
+                rr=s.post(url,headers=_headers(),json=refine_payload,timeout=(10,120))
+                print("[openai-call] status=", rr.status_code)
+                try: print("[openai-call] body  =", (rr.text or "")[:1000])
+                except: pass
+
             rr.raise_for_status()
             rb=(rr.json().get("choices",[{}])[0].get("message",{}) or {}).get("content","{}")
             ro=_json_obj(rb,{})
@@ -441,9 +496,16 @@ async def copy_from_image(
                 "involvement":involvement,"style_goal":goal,"uploaded_path":uploaded_path,"uploaded_url":uploaded_url,
                 "log_path":os.path.abspath(log_path).replace('\\','/'),"log_url":log_url}
     except requests.RequestException as e:
-        resp=getattr(e,"response",None); detail=f"OpenAI error: {e}"
+        resp=getattr(e,"response",None)
+        print("[openai-call] exception =", repr(e))
         if resp is not None:
-            try: detail+=f"\n{resp.text}"
+            try:
+                print("[openai-call] resp.status =", resp.status_code)
+                print("[openai-call] resp.body   =", (resp.text or "")[:1000])
+            except: pass
+        detail="Upstream(OpenAI) request failed"
+        if resp is not None:
+            try: detail+=f"\nstatus={resp.status_code}\nbody={resp.text}"
             except: pass
         raise HTTPException(502,detail=detail)
     except HTTPException: raise
@@ -461,9 +523,21 @@ async def suggest_keywords(file: UploadFile = File(...), n: int = Form(6)):
         {"role":"system","content":"You extract concise Korean keywords from images. Always return JSON."},
         {"role":"user","content":[{"type":"text","text":prompt},{"type":"image_url","image_url":{"url":image_data_url}}]}
     ],"temperature":0.2,"response_format":{"type":"json_object"}}
-    s=_session(); r=s.post(f"{OPENAI_BASE}/chat/completions",headers=_headers(),json=payload,timeout=(10,120))
+    s=_session()
+    # 디버그: suggest 호출
+    print("[openai-call] url   =", f"{OPENAI_BASE}/chat/completions")
+    print("[openai-call] model =", payload["model"])
+    r=s.post(f"{OPENAI_BASE}/chat/completions",headers=_headers(),json=payload,timeout=(10,120))
+    print("[openai-call] status=", r.status_code)
+    try: print("[openai-call] body  =", (r.text or "")[:1000])
+    except: pass
     if r.status_code>=400 and MODEL_VISION!=MODEL_FALLBACK:
-        payload["model"]=MODEL_FALLBACK; r=s.post(f"{OPENAI_BASE}/chat/completions",headers=_headers(),json=payload,timeout=(10,120))
+        payload["model"]=MODEL_FALLBACK
+        print("[openai-call] fallback ->", payload["model"])
+        r=s.post(f"{OPENAI_BASE}/chat/completions",headers=_headers(),json=payload,timeout=(10,120))
+        print("[openai-call] status=", r.status_code)
+        try: print("[openai-call] body  =", (r.text or "")[:1000])
+        except: pass
     r.raise_for_status()
     parsed=_json_obj((r.json().get("choices",[{}])[0].get("message",{}) or {}).get("content","{}"),{"keywords":[]})
     return {"ok":True,"keywords":_norm_keywords(parsed,n=max(1,min(int(n),8)))}

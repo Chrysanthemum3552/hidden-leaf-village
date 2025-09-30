@@ -1,0 +1,81 @@
+[IMAGE]
+C:\Users\dltmd\OneDrive\Desktop\advan\hidden-leaf-village\data\uploads\upload_20250930_174934_40c5a7e9.png
+
+[CONTEXT]
+{
+  "tone": "짧고 강렬, 자연스러운 한국어",
+  "platform": null,
+  "target_audience": null,
+  "brand": null,
+  "product": null,
+  "char_limit_headline": 24,
+  "char_limit_subline": 48,
+  "hashtags_n": 3,
+  "model": "gpt-4o-mini",
+  "n_candidates": 4,
+  "creativity": 0.8,
+  "persona": "10대 학생",
+  "persona_resolved": [
+    "10대",
+    "학생"
+  ],
+  "user_keywords": [
+    "타임세일",
+    "망고빙수",
+    "시원한"
+  ],
+  "must_include_keywords": false,
+  "trend_style": "light",
+  "meme_keywords": null,
+  "allow_emoji": false,
+  "involvement": "low",
+  "style_goal": "low_involvement_push",
+  "price_hint": null,
+  "category_hint": null,
+  "business_name": "나뭇잎 카페",
+  "brand_used": "나뭇잎 카페",
+  "must_include_brand": false
+}
+
+[CANDIDATES]
+[
+  {
+    "headline": "시원한 망고빙수",
+    "subline": "더위는 이걸로 날려버리자. 30원에 지금 겟!",
+    "hashtags": [
+      "#맹모빙수",
+      "#시원한여름",
+      "#핵꿀템"
+    ],
+    "reasons": "가벼운 가격에 시원함을 더해줄 필수템."
+  }
+]
+
+[BEST]
+{
+  "headline": "시원한 망고빙수",
+  "subline": "더위는 이걸로 날려버리자. 30원에 지금 겟!",
+  "hashtags": [
+    "#맹모빙수",
+    "#시원한여름",
+    "#핵꿀템"
+  ],
+  "reasons": "가벼운 가격에 시원함을 더해줄 필수템."
+}
+
+[USAGE]
+{
+  "prompt_tokens": 26312,
+  "completion_tokens": 84,
+  "total_tokens": 26396,
+  "prompt_tokens_details": {
+    "cached_tokens": 0,
+    "audio_tokens": 0
+  },
+  "completion_tokens_details": {
+    "reasoning_tokens": 0,
+    "audio_tokens": 0,
+    "accepted_prediction_tokens": 0,
+    "rejected_prediction_tokens": 0
+  }
+}
