@@ -326,7 +326,7 @@ def render_menu(req: MenuReq) -> Image.Image:
 # ──────────────────────────────────────────────────────────────────
 @router.post("/redesign/menu-board", tags=["Menu Redesign"])
 def redesign_menu_board_endpoint(req: RedesignReq):
-    base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    base_url = os.getenv("BACKEND_PUBLIC_URL", "https://hidden-leaf-village.onrender.com")
 
     base64_img = get_base64_image(req.target_image_url)
     if not base64_img:
@@ -372,7 +372,7 @@ def make_menu_background_endpoint(req: BgReq):
     fname = f"bg_{random.randint(0, 999999):06}.png"
     img.save(os.path.join(storage, fname), "PNG", optimize=True)
 
-    base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    base_url = os.getenv("BACKEND_PUBLIC_URL", "https://hidden-leaf-village.onrender.com")
     return {"ok": True, "background_url": f"{base_url}/static/outputs/{fname}"}
 
 @router.post("/menu-board", tags=["Image Generation"])
@@ -392,7 +392,7 @@ def generate_menu_endpoint(req: MenuReq):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이미지 저장 실패: {e}")
 
-    base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    base_url = os.getenv("BACKEND_PUBLIC_URL", "https://hidden-leaf-village.onrender.com")
     public_url = f"{base_url}/static/outputs/{fname}"
     return {"ok": True, "url": public_url}
 
@@ -413,7 +413,7 @@ def generate_menu_endpoint(req: MenuReq):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이미지 저장 실패: {e}")
 
-    base_url = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
+    base_url = os.getenv("BACKEND_PUBLIC_URL", "https://hidden-leaf-village.onrender.com")
     public_url = f"{base_url}/static/outputs/{fname}"
 
     return {

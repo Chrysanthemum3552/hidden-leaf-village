@@ -6,12 +6,10 @@ from dotenv import load_dotenv
 # ----------------------------
 # 환경 변수 로드
 # ----------------------------
-load_dotenv()
-# 로컬 개발 기본값은 localhost:8000, 배포 시 .env의 BACKEND_URL로 덮어쓰기
 BACKEND = (
     os.getenv("BACKEND_URL")
     or os.getenv("BACKEND_PUBLIC_URL")
-    or "http://localhost:8000"
+    or "https://hidden-leaf-village.onrender.com"
 ).rstrip("/")
 
 
