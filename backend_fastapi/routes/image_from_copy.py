@@ -64,7 +64,10 @@ MODELS_DIR = ROOT_DIR / "models"
 TRANSLATION_MODEL = MODELS_DIR / "yanolja_rosetta_12b_q8_0.gguf"
 
 # ComfyUI 설정 (별도 디렉토리)
-COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+COMFYUI_URL = os.getenv(
+    "COMFYUI_URL",
+    "https://nonblamable-timothy-superattainable.ngrok-free.dev"
+)
 COMFYUI_MODELS = {
     "unet": "flux1-schnell-Q4_K_S.gguf",
     "clip_l": "clip_l.safetensors", 
@@ -693,3 +696,5 @@ def model_status():
         "status": "ready" if all_models_ready else "not_ready",
         "message": "모든 시스템 준비됨" if all_models_ready else "설정 필요"
     }
+
+
