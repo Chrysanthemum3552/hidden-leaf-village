@@ -12,8 +12,9 @@
    - models/clip/t5xxl_fp16.safetensors  
    - models/vae/ae.safetensors
 
-3. 번역 모델이 프로젝트 models/ 디렉토리에 있어야 합니다:
-   - models/yanolja_rosetta_12b_q8_0.gguf
+3. 번역 모델은 Hugging Face Hub에서 자동 다운로드됨:
+   - repo: Chloros/rosetta-12b-gguf
+   - file: yanolja_rosetta_12b_q4_k_m.gguf
 
 사용법:
 1. ComfyUI 서버 실행: cd ComfyUI/ComfyUI && python main.py
@@ -44,6 +45,8 @@ try:
 except ImportError:
     GGUF_AVAILABLE = False
 
+from huggingface_hub import hf_hub_download  # ✅ 추가
+
 # ---- env 로드 (프로젝트 루트의 .env) ----
 ROOT_DIR = Path(__file__).resolve().parents[2]  # .../hidden-leaf-village
 load_dotenv(dotenv_path=ROOT_DIR / ".env", override=True)
@@ -59,15 +62,17 @@ STORAGE_ROOT = os.getenv(
 OUTPUT_DIR = os.path.join(STORAGE_ROOT, "outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# 로컬 모델 경로
-MODELS_DIR = ROOT_DIR / "models"
-TRANSLATION_MODEL = MODELS_DIR / "yanolja_rosetta_12b_q8_0.gguf"
+# ✅ Hugging Face Hub에서 번역 모델 다운로드 & 캐시
+TRANSLATION_MODEL = Path(
+    hf_hub_download(
+        repo_id="Chloros/rosetta-12b-gguf",
+        filename="yanolja_rosetta_12b_q4_k_m.gguf"
+    )
+)
 
 # ComfyUI 설정 (별도 디렉토리)
-COMFYUI_URL = os.getenv(
-    "COMFYUI_URL",
-    "https://nonblamable-timothy-superattainable.ngrok-free.dev"
-)
+COMFYUI_URL = "https://nonblamable-timothy-superattainable.ngrok-free.dev"
+
 COMFYUI_MODELS = {
     "unet": "flux1-schnell-Q4_K_S.gguf",
     "clip_l": "clip_l.safetensors", 
@@ -112,7 +117,7 @@ class LocalModelPipeline:
     
     def check_models(self):
         """필요한 모델들이 존재하는지 확인"""
-        # 번역 모델만 체크 (로컬)
+        # 번역 모델만 체크 (Path 객체라 exists() 사용 가능)
         if not TRANSLATION_MODEL.exists():
             raise HTTPException(
                 status_code=500,
@@ -686,7 +691,7 @@ def model_status():
         },
         "dependencies": {
             "gguf_available": GGUF_AVAILABLE,
-            "models_dir": str(MODELS_DIR)
+            "models_dir": str(ROOT_DIR / "models")
         },
         "prompt_enhancement": {
             "base_quality": "sharp, clean composition, high quality",
@@ -696,5 +701,3 @@ def model_status():
         "status": "ready" if all_models_ready else "not_ready",
         "message": "모든 시스템 준비됨" if all_models_ready else "설정 필요"
     }
-
-

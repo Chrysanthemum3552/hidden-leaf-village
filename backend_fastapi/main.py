@@ -57,7 +57,7 @@ BASE_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
 # ─────────────────────────────────────────
 # 라우터 등록
 # ─────────────────────────────────────────
-from routes.image_from_copy import router as image_from_copy_router
+from routes.image_from_copy import router as image_from_copy_router, _get_local_pipeline
 from routes.copy_from_image import router as copy_from_image_router
 from routes.menu_service import router as menu_service_router
 
@@ -65,6 +65,22 @@ from routes.menu_service import router as menu_service_router
 app.include_router(image_from_copy_router, prefix="/generate", tags=["image-from-copy"])
 app.include_router(copy_from_image_router, prefix="/generate", tags=["copy-from-image"])
 app.include_router(menu_service_router,  prefix="/generate", tags=["menu-service"])
+
+# ─────────────────────────────────────────
+# 서버 시작 시 모델 미리 로드
+# ─────────────────────────────────────────
+@app.on_event("startup")
+def preload_models():
+    """
+    서버 시작 시 번역 모델을 미리 로딩하여
+    첫 요청에서 timeout 발생하지 않도록 함
+    """
+    try:
+        pipeline = _get_local_pipeline()
+        pipeline.load_models()
+        print("✅ 번역 모델 사전 로딩 완료")
+    except Exception as e:
+        print(f"⚠️ 번역 모델 로딩 실패: {e}")
 
 # ─────────────────────────────────────────
 # 헬스체크 & 인덱스
@@ -76,9 +92,9 @@ def root():
         "service": "ad-gen-service",
         "static_example": f"{BASE_URL}/static/outputs/",
         "endpoints": {
-            "image_from_copy": "/generate/…",
-            "copy_from_image": "/generate/…",
-            "menu_service": "/generate/…"
+            "image_from_copy": "/generate/image-from-copy",
+            "copy_from_image": "/generate/copy-from-image",
+            "menu_service": "/generate/menu-service"
         }
     }
 

@@ -10,3 +10,4 @@ backend_fastapi/routes/env
 
 ComfyUI/
 models/
+hf_cache/
