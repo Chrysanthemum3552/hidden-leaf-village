@@ -1,32 +1,29 @@
 """
-한국어 -> 영어 번역 + FLUX 이미지 생성 API (Render FastAPI ↔ ngrok 로컬 모델/ComfyUI)
+한국어 -> 영어 번역 + FLUX 이미지 생성 API
 
-전제 조건:
-- FastAPI는 Render에서 구동(메모리 512MB 제한)
-- 번역 모델과 ComfyUI는 "로컬"에서 실행하고 ngrok으로 공개
-  - Render FastAPI는 아래 두 주소로만 붙음:
-    1) TRANSLATION_BRIDGE_URL  (로컬 번역 브릿지 ngrok)
-    2) COMFYUI_URL             (로컬 ComfyUI ngrok)
+전제 조건 (각각의 터미널에서 실행):
+1. ComfyUI 서버가 먼저 실행되어야 합니다:(ComfyUI가 git clone 되어 있다고 가정)
+   cd ~/hidden-leaf-village/ComfyUI/ComfyUI
+   python main.py
+   
+2. 필요한 모델 파일들이 ComfyUI 디렉토리에 있어야 합니다:
+   - models/unet/flux1-schnell-Q4_K_S.gguf
+   - models/clip/clip_l.safetensors
+   - models/clip/t5xxl_fp16.safetensors  
+   - models/vae/ae.safetensors
 
-로컬 측 준비:
-1) ComfyUI (예: 8188) 실행 후 ngrok http 8188
-   → 예: https://comfy-xxxx.ngrok-free.app
-
-2) 번역 브릿지(간단 FastAPI) 실행 후 ngrok http 7000 (예시)
-   - /translate:  POST { "text": "..." } → { "text": "..." (영어) }
-   - /classify :  POST { "text": "...", "type": "person"|"object" } → { "yes": true/false }
-   → 예: https://trans-xxxx.ngrok-free.app
-   (번역 모델 llama.cpp를 이 브릿지에서 로드하세요. Render에서는 절대 모델 로드 X)
-
-Render 측(이 파일):
-- 아래 TRANSLATION_BRIDGE_URL, COMFYUI_URL 을 ngrok 주소로 설정
-- BACKEND_PUBLIC_URL은 Render 도메인 그대로 유지하면 /static/* 경로로 업로드 파일 접근 가능
+3. 번역 모델이 프로젝트 models/ 디렉토리에 있어야 합니다:
+   - models/yanolja_rosetta_12b_q8_0.gguf
 
 사용법:
-1) (로컬) ComfyUI + 번역브릿지 실행 후 ngrok으로 공개
-2) (Render) FastAPI 서버 정상 구동
-3) POST /image-from-copy
-   { "text":"하늘을 나는 고양이", "style":"realistic", "seed":0 }
+1. ComfyUI 서버 실행: cd ComfyUI/ComfyUI && python main.py
+2. FastAPI 서버 실행: python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+3. POST 요청을 /image-from-copy 엔드포인트로 전송:
+   {
+       "text": "하늘을 나는 고양이",
+       "style": "선택적 스타일 (예: 'realistic')",
+       "seed": 0  # 선택적 시드 값
+   }
 """
 
 import os, uuid
@@ -54,8 +51,7 @@ load_dotenv(dotenv_path=ROOT_DIR / ".env", override=True)
 
 router = APIRouter()
 
-# Render에서 정적 파일이 서비스되는 공개 URL (Render 환경변수 또는 디폴트)
-BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "https://hidden-leaf-village.onrender.com").rstrip("/")
+BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000").rstrip("/")
 
 # 저장 루트 (Render 파일시스템)
 STORAGE_ROOT = os.getenv(
@@ -65,27 +61,18 @@ STORAGE_ROOT = os.getenv(
 OUTPUT_DIR = os.path.join(STORAGE_ROOT, "outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ==========================
-# 🔗 원격(ngrok) 엔드포인트
-# ==========================
-# 1) 로컬 ComfyUI ngrok 주소
-COMFYUI_URL = "https://nonblamable-timothy-superattainable.ngrok-free.dev"
+# 로컬 모델 경로
+MODELS_DIR = ROOT_DIR / "models"
+TRANSLATION_MODEL = MODELS_DIR / "yanolja_rosetta_12b_q4_k_m.gguf"
 
-# 2) 로컬 번역 브릿지 ngrok 주소 (중요: 이게 있으면 'remote' 모드로 동작)
-TRANSLATION_BRIDGE_URL = os.getenv("TRANSLATION_BRIDGE_URL", "https://YOUR-TRANSLATION-NGROK-URL").rstrip("/")
-
-# ComfyUI에서 기대하는 모델 파일명 (ComfyUI 측 models 폴더에 준비)
+# ComfyUI 설정 (별도 디렉토리)
+COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
 COMFYUI_MODELS = {
     "unet": "flux1-schnell-Q4_K_S.gguf",
     "clip_l": "clip_l.safetensors", 
     "clip_t5": "t5xxl_fp16.safetensors",
     "vae": "ae.safetensors"
 }
-
-# === 로컬 모델 fallback (Render에선 사실상 사용 불가이므로 off가 기본) ===
-# Hugging Face Hub 경로를 남겨두지만, Render 메모리 한계 때문에 remote 모드가 기본입니다.
-HF_REPO_ID = "Chloros/rosetta-12b-gguf"
-HF_FILENAME = "yanolja_rosetta_12b_q4_k_m.gguf"
 
 # 에러 메시지 상수 정의
 class ErrorMessages:
@@ -119,56 +106,22 @@ _model_loading_lock = threading.Lock()
 
 
 class LocalModelPipeline:
-    """
-    텍스트→이미지 파이프라인
-    - remote 모드: Render에선 이 모드가 기본. 로컬 번역 브릿지(ngrok) + 로컬 ComfyUI(ngrok)에 HTTP로 붙음.
-    - local  모드: (개발자 로컬에서만) llama-cpp로 gguf 직접 로드 (Render 메모리 제한 때문에 실서비스에선 비권장)
-    """
+    """로컬 모델을 사용한 텍스트→이미지 파이프라인"""
+    
     def __init__(self):
         self.translator = None
         self.loaded = False
-
-        # remote 모드 여부
-        self.remote_translation = bool(TRANSLATION_BRIDGE_URL and TRANSLATION_BRIDGE_URL.startswith("http"))
     
-    # ---------- 공용 헬퍼 ----------
-    def _http_post_json(self, url: str, payload: dict, timeout=15):
-        try:
-            r = requests.post(url, json=payload, timeout=timeout)
-            if r.status_code >= 400:
-                raise HTTPException(502, f"Upstream error {r.status_code}: {r.text[:300]}")
-            return r.json()
-        except requests.RequestException as e:
-            raise HTTPException(502, f"Upstream request failed: {e}")
-
-    # ---------- 셋업/체크 ----------
     def check_models(self):
-        """
-        원격 모드: 번역 브릿지 health, ComfyUI 연결만 확인
-        로컬 모드: gguf 파일 존재, llama-cpp 설치 여부 확인
-        """
-        # 1) 번역 브릿지(원격) 또는 로컬 모델 체크
-        if self.remote_translation:
-            # /health 또는 /translate 간단 호출로 확인
-            try:
-                ping = self._http_post_json(f"{TRANSLATION_BRIDGE_URL}/translate", {"text":"안녕"}, timeout=8)
-                if not isinstance(ping, dict) or "text" not in ping:
-                    raise HTTPException(502, f"{ErrorMessages.TRANSLATION_ERROR}: 브릿지 응답 형식 오류")
-            except HTTPException:
-                raise
-            except Exception as e:
-                raise HTTPException(502, f"{ErrorMessages.TRANSLATION_ERROR}: 번역 브릿지 연결 실패 - {e}")
-        else:
-            # === 로컬 모드 (Render에선 사실상 비활성) ===
-            try:
-                from huggingface_hub import hf_hub_download
-                model_path = Path(hf_hub_download(repo_id=HF_REPO_ID, filename=HF_FILENAME))
-            except Exception as e:
-                raise HTTPException(500, f"{ErrorMessages.MODEL_MISSING_ERROR}: HF 다운로드 실패 - {e}")
-            if not GGUF_AVAILABLE:
-                raise HTTPException(500, f"{ErrorMessages.CONFIG_ERROR}: llama-cpp-python이 설치되지 않았습니다")
-
-        # 2) ComfyUI 연결 확인
+        """필요한 모델들이 존재하는지 확인"""
+        # 번역 모델만 체크 (로컬)
+        if not TRANSLATION_MODEL.exists():
+            raise HTTPException(
+                status_code=500,
+                detail=f"{ErrorMessages.MODEL_MISSING_ERROR}: 번역 모델 ({TRANSLATION_MODEL.name})"
+            )
+        
+        # ComfyUI 연결 확인 (FLUX 모델들은 ComfyUI에서 확인)
         try:
             response = requests.get(f"{COMFYUI_URL}/system_stats", timeout=5)
             if response.status_code != 200:
@@ -183,74 +136,59 @@ class LocalModelPipeline:
             )
     
     def load_models(self):
-        """
-        remote 모드: 별도 로딩 없음(브릿지 ping만 성공하면 준비 완료)
-        local  모드: llama-cpp로 gguf 로딩 (Render에서는 메모리 제한으로 비권장)
-        """
+        """필요한 모델들 로딩"""
         if self.loaded:
             return
         
-        print("파이프라인 체크 및 로딩 시작...")
-        self.check_models()
-
-        if self.remote_translation:
-            print("원격 번역 브릿지 모드: 모델 로딩 불필요")
-            self.translator = None
-        else:
-            # === 로컬 모드 (개발자 로컬에서만) ===
-            from huggingface_hub import hf_hub_download
-            model_path = Path(hf_hub_download(repo_id=HF_REPO_ID, filename=HF_FILENAME))
-            print(f"번역 모델 로딩(로컬): {model_path.name}")
-            try:
-                self.translator = Llama(
-                    model_path=str(model_path),
-                    n_ctx=512,
-                    n_threads=4,
-                    n_gpu_layers=-1,
-                    verbose=False
-                )
-            except Exception as e:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"{ErrorMessages.MODEL_LOAD_ERROR}: 번역 모델 로딩 실패 - {str(e)}"
-                )
+        print("로컬 모델들 체크 및 로딩 중...")
         
-        print("모든 준비 완료")
+        # 1. 모델 파일 존재 확인
+        self.check_models()
+        
+        # 2. 의존성 확인
+        if not GGUF_AVAILABLE:
+            raise HTTPException(
+                status_code=500,
+                detail=f"{ErrorMessages.CONFIG_ERROR}: llama-cpp-python이 설치되지 않았습니다"
+            )
+        
+        # 3. 번역 모델 로딩
+        print(f"번역 모델 로딩: {TRANSLATION_MODEL.name}")
+        try:
+            self.translator = Llama(
+                model_path=str(TRANSLATION_MODEL),
+                n_ctx=512,
+                n_threads=4,
+                n_gpu_layers=-1,
+                verbose=False
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"{ErrorMessages.MODEL_LOAD_ERROR}: 번역 모델 로딩 실패 - {str(e)}"
+            )
+        
+        print("모든 모델 로딩 완료")
         self.loaded = True
     
-    # ---------- 번역/분류 ----------
     def translate_korean(self, text: str) -> str:
-        """
-        한글을 영어로 번역
-        - remote 모드: /translate 호출
-        - local  모드: llama-cpp 호출
-        """
+        """한글을 영어로 번역"""
         if not self.loaded:
             self.load_models()
         
-        # 한글 포함 확인
+        # 한글이 포함되어 있는지 확인
         has_korean = any('\uac00' <= char <= '\ud7af' for char in text)
         if not has_korean:
             print(f"한글 없음, 원문 사용: {text}")
             return text
         
-        if self.remote_translation:
-            try:
-                resp = self._http_post_json(f"{TRANSLATION_BRIDGE_URL}/translate", {"text": text}, timeout=12)
-                english_text = (resp.get("text") or "").strip()
-                return english_text or text
-            except HTTPException:
-                raise
-            except Exception as e:
-                print(f"번역 오류(브릿지): {e}, 원문 사용")
-                return text
-
-        # === 로컬 모드 ===
-        print(f"한글 번역 중(로컬 llama): {text}")
+        print(f"한글 번역 중: {text}")
+        
         prompt = f"""Translate the following Korean text to English:
 
 Korean: {text}
 English:"""
+        
         try:
             response = self.translator(
                 prompt,
@@ -258,132 +196,51 @@ English:"""
                 temperature=0.0,
                 stop=["Korean:", "\n\n", "Translation:"]
             )
+            
             english_text = response['choices'][0]['text'].strip()
+            
+            # 후처리
             if "English:" in english_text:
                 english_text = english_text.split("English:")[-1]
             english_text = english_text.split("\n")[0].strip()
-            return english_text or text
+            
+            if not english_text:
+                print("번역 결과 없음, 원문 사용")
+                return text
+            
+            print(f"번역 완료: {english_text}")
+            return english_text
+            
         except Exception as e:
-            print(f"번역 오류(로컬): {e}, 원문 사용")
+            print(f"번역 오류: {e}, 원문 사용")
             return text
     
-    def classify_person(self, english: str) -> bool:
-        """
-        사람 여부 판단 (명시적 단어 포함 여부)
-        - remote 모드: /classify 호출(type=person)
-        - local  모드: llama-cpp
-        """
-        if not self.loaded:
-            self.load_models()
-        
-        if self.remote_translation:
-            try:
-                resp = self._http_post_json(f"{TRANSLATION_BRIDGE_URL}/classify",
-                                            {"text": english, "type": "person"},
-                                            timeout=6)
-                return bool(resp.get("yes", False))
-            except HTTPException:
-                raise
-            except Exception as e:
-                print(f"인물 판단 오류(브릿지): {e}")
-                return False
-
-        # === 로컬 모드 ===
-        prompt = f"""Answer only YES or NO.
-
-Text: {english}
-
-Question: Does this text explicitly contain any human-related words 
-(such as man, woman, person, people, child, boy, girl, baby, face, portrait, model, actor, actress, selfie)?
-
-Rules:
-- Answer YES only if at least one of these words appears in the text.
-- If none of these words appear, you MUST answer NO.
-- Do not assume or guess implied humans (e.g., someone riding a bicycle).
-- Do not use context or imagination. Base your answer only on explicit words in the text.
-
-Answer:"""
-        try:
-            response = self.translator(prompt, max_tokens=5, temperature=0.0, stop=["\n"])
-            answer = response['choices'][0]['text'].strip().lower()
-            return "yes" in answer
-        except Exception as e:
-            print(f"인물 판단 오류(로컬): {e}")
-            return False
-    
-    def classify_object(self, english: str) -> bool:
-        """
-        사물 여부 판단 (명시적 단어 포함 여부) — 의도상 '사람 단어'가 있으면 YES로 하던 원래 버그성 규칙을 그대로 유지
-        - remote 모드: /classify(type=object) 호출 (동일 규칙을 브릿지에서 구현)
-        - local  모드: llama-cpp
-        """
-        if not self.loaded:
-            self.load_models()
-        
-        if self.remote_translation:
-            try:
-                resp = self._http_post_json(f"{TRANSLATION_BRIDGE_URL}/classify",
-                                            {"text": english, "type": "object"},
-                                            timeout=6)
-                return bool(resp.get("yes", False))
-            except HTTPException:
-                raise
-            except Exception as e:
-                print(f"사물 판단 오류(브릿지): {e}")
-                return False
-
-        # === 로컬 모드 === (원본 규칙 유지)
-        prompt = f"""Answer with only YES or NO.
-
-Text: {english}
-
-Rule:
-- Answer YES only if the text explicitly mentions humans or human-related words.
-- Do NOT infer implied presence.
-- If unclear, answer NO.
-
-Answer:"""
-        try:
-            response = self.translator(prompt, max_tokens=5, temperature=0.0, stop=["\n"])
-            answer = response['choices'][0]['text'].strip().lower()
-            return "yes" in answer
-        except Exception as e:
-            print(f"사물 판단 오류(로컬): {e}")
-            return False
-    
-    def enhance_prompt(self, text: str) -> str:
-        """프롬프트 강화: 번역 + 분류 + 키워드 추가 (원본 로직 유지)"""
+    def enhance_prompt(self, text: str, style: Optional[str] = None) -> str:
+        """프롬프트 강화: 번역 + 스타일 번역 + 기본 품질 키워드"""
         if not self.loaded:
             self.load_models()
         
         print("\n=== 프롬프트 강화 시작 ===")
         
-        # 1. 번역
+        # 1. 텍스트 번역
         english = self.translate_korean(text)
         
-        # 2. 분류
-        print("콘텐츠 분류 중...")
-        has_person = self.classify_person(english)
-        has_object = self.classify_object(english)
+        # 2. 스타일 번역 및 적용
+        if style:
+            english_style = self.translate_korean(style)
+            english = f"{english} in {english_style} style"
+            print(f"스타일 적용: {style} → {english_style}")
         
-        # 3. 키워드 강화
-        enhanced = f"{english}, sharp, clean composition, high quality"
+        # 3. 기본 품질 키워드 추가
+        enhanced = f"{english}, detailed, sharp, high quality"
         
-        if has_person:
-            enhanced += ", portrait, detailed face, natural skin texture"
-            print("  인물 키워드 추가")
-        
-        if has_object:
-            enhanced += ", sharp edges"
-            print("  사물 키워드 추가")
-        
-        print(f"최종 강화 프롬프트: {enhanced}")
+        print(f"최종 프롬프트: {enhanced}")
         print("=== 프롬프트 강화 완료 ===\n")
         
         return enhanced
     
-    def generate_image_with_comfyui(self, prompt: str, style: Optional[str] = None, seed: Optional[int] = None) -> bytes:
-        """ComfyUI(ngrok)로 실제 이미지 생성 (원본 워크플로우 유지)"""
+    def generate_image_with_comfyui(self, prompt: str, seed: Optional[int] = None) -> bytes:
+        """ComfyUI를 통한 실제 이미지 생성"""
         print(f"ComfyUI로 실제 이미지 생성: {prompt}")
         
         # ComfyUI 워크플로우 정의 (검증된 구조 사용)
@@ -397,14 +254,15 @@ Answer:"""
                 "inputs": {
                     "clip_name1": COMFYUI_MODELS["clip_l"],
                     "clip_name2": COMFYUI_MODELS["clip_t5"],
-                    "type": "flux"
+                    "type": "flux",
+                    "device": "default"
                 },
                 "class_type": "DualCLIPLoader",
                 "_meta": {"title": "Load CLIP"}
             },
             "3": {
                 "inputs": {
-                    "text": f"{prompt} in {style} style" if style else prompt,
+                    "text": prompt,
                     "clip": ["2", 0]
                 },
                 "class_type": "CLIPTextEncode",
@@ -465,7 +323,7 @@ Answer:"""
             response = requests.post(
                 f"{COMFYUI_URL}/prompt",
                 json={"prompt": workflow, "client_id": client_id},
-                timeout=12
+                timeout=10
             )
             
             if response.status_code != 200:
@@ -483,7 +341,7 @@ Answer:"""
             for _ in range(150):  # 5분 타임아웃
                 time.sleep(2)
                 
-                hist_response = requests.get(f"{COMFYUI_URL}/history/{prompt_id}", timeout=8)
+                hist_response = requests.get(f"{COMFYUI_URL}/history/{prompt_id}")
                 if hist_response.status_code == 200:
                     history = hist_response.json()
                     
@@ -504,7 +362,7 @@ Answer:"""
                                             "type": "output"
                                         }
                                         
-                                        img_response = requests.get(img_url, params=params, timeout=12)
+                                        img_response = requests.get(img_url, params=params)
                                         if img_response.status_code == 200:
                                             print("ComfyUI 이미지 생성 완료")
                                             return img_response.content
@@ -517,9 +375,9 @@ Answer:"""
         except Exception as e:
             # ComfyUI 실패시 데모 모드로 fallback
             print(f"ComfyUI 실패, 데모 모드로 fallback: {e}")
-            return self.generate_image_demo(prompt, style, seed)
+            return self.generate_image_demo(prompt, seed)
     
-    def generate_image_demo(self, prompt: str, style: Optional[str] = None, seed: Optional[int] = None) -> bytes:
+    def generate_image_demo(self, prompt: str, seed: Optional[int] = None) -> bytes:
         """데모 이미지 생성 (ComfyUI 실패시 fallback)"""
         from PIL import Image, ImageDraw, ImageFont
         import io
@@ -548,14 +406,14 @@ Answer:"""
         # 프롬프트 정보
         info_lines = [
             f"Prompt: {prompt[:60]}{'...' if len(prompt) > 60 else ''}",
-            f"Style: {style or 'None'}",
             f"Seed: {seed or 'Random'}",
             "",
-            "ComfyUI Status: Failed (ngrok?)",
-            f"Check: {COMFYUI_URL}",
+            "ComfyUI Status: Failed",
+            "Check ComfyUI server is running",
+            "at http://127.0.0.1:8188",
             "",
-            "Translation: remote bridge",
-            f"Bridge: {TRANSLATION_BRIDGE_URL}"
+            "Translation Model: OK",
+            f"✓ {TRANSLATION_MODEL.name}"
         ]
         
         y_offset = 300
@@ -574,7 +432,7 @@ Answer:"""
 
 
 def _get_local_pipeline():
-    """파이프라인 싱글톤"""
+    """로컬 파이프라인 싱글톤"""
     global _translator
     
     if _translator is None:
@@ -629,7 +487,7 @@ def _validate_request(req: CopyToImageReq) -> CopyToImageReq:
 
 @router.post("/image-from-copy")
 def image_from_copy(req: CopyToImageReq):
-    """텍스트로부터 이미지 생성 - 프롬프트 강화 적용"""
+    """텍스트로부터 이미지 생성 - 번역 + 기본 품질 향상"""
     
     # 기본 요청 검증
     validated_req = _validate_request(req)
@@ -639,27 +497,20 @@ def image_from_copy(req: CopyToImageReq):
     try:
         pipeline = _get_local_pipeline()
         
-        # 1. 프롬프트 강화 (번역 + 분류 + 키워드 추가)
+        # 1. 프롬프트 강화 (번역 + 스타일 번역 + 기본 품질 키워드)
         enhancement_start = time.time()
-        enhanced_prompt = pipeline.enhance_prompt(validated_req.text)
+        enhanced_prompt = pipeline.enhance_prompt(validated_req.text, validated_req.style)
         enhancement_time = time.time() - enhancement_start
         
-        # 2. 스타일 적용 (선택사항)
-        if validated_req.style:
-            final_prompt = f"{enhanced_prompt} in {validated_req.style} style"
-        else:
-            final_prompt = enhanced_prompt
-        
-        # 3. ComfyUI로 실제 이미지 생성
+        # 2. ComfyUI로 실제 이미지 생성
         generation_start = time.time()
         img_bytes = pipeline.generate_image_with_comfyui(
-            final_prompt, 
-            validated_req.style, 
+            enhanced_prompt,
             validated_req.seed
         )
         generation_time = time.time() - generation_start
         
-        # 4. 파일 저장 (Render 파일시스템 → Render 정적 URL로 접근)
+        # 3. 파일 저장
         save_name = f"image_from_copy_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
         save_path = os.path.join(OUTPUT_DIR, save_name)
         
@@ -678,10 +529,9 @@ def image_from_copy(req: CopyToImageReq):
             "metadata": {
                 "original_text": validated_req.text,
                 "enhanced_prompt": enhanced_prompt,
-                "final_prompt": final_prompt,
                 "style": validated_req.style,
                 "seed": validated_req.seed,
-                "model_used": "ComfyUI(remote) + TranslationBridge(remote)",
+                "model_used": "ComfyUI + Local Translation",
                 "demo_mode": False,
                 "timing": {
                     "enhancement_time": round(enhancement_time, 2),
@@ -703,16 +553,10 @@ def image_from_copy(req: CopyToImageReq):
 # 모델 상태 확인 엔드포인트
 @router.get("/model-status")
 def model_status():
-    """현재 모델/브릿지/ComfyUI 상태 확인 (remote 우선)"""
+    """현재 모델 상태 확인"""
     
-    # 번역(브릿지) 체크
-    bridge_ok = False
-    try:
-        # 간단 ping
-        ping = requests.post(f"{TRANSLATION_BRIDGE_URL}/translate", json={"text": "테스트"}, timeout=5)
-        bridge_ok = (ping.status_code == 200 and "text" in (ping.json() or {}))
-    except Exception:
-        bridge_ok = False
+    # 번역 모델 체크
+    translation_exists = TRANSLATION_MODEL.exists()
     
     # ComfyUI 연결 체크
     comfyui_available = False
@@ -747,12 +591,17 @@ def model_status():
     except:
         pass
     
-    all_models_ready = bridge_ok and comfyui_available and all(comfyui_models.values()) if comfyui_models else (bridge_ok and comfyui_available)
+    all_models_ready = (
+        translation_exists and 
+        comfyui_available and 
+        all(comfyui_models.values())
+    )
     
     return {
-        "translation_bridge": {
-            "url": TRANSLATION_BRIDGE_URL,
-            "reachable": bridge_ok
+        "translation_model": {
+            "file": TRANSLATION_MODEL.name,
+            "exists": translation_exists,
+            "path": str(TRANSLATION_MODEL)
         },
         "comfyui": {
             "server_available": comfyui_available,
@@ -761,13 +610,11 @@ def model_status():
             "expected_models": COMFYUI_MODELS
         },
         "dependencies": {
-            "mode": "remote" if TRANSLATION_BRIDGE_URL else "local-fallback",
-            "gguf_available": GGUF_AVAILABLE
+            "gguf_available": GGUF_AVAILABLE,
+            "models_dir": str(MODELS_DIR)
         },
         "prompt_enhancement": {
-            "base_quality": "sharp, clean composition, high quality",
-            "person_keywords": "portrait, detailed face, natural skin texture",
-            "object_keywords": "product photo, centered object, sharp edges"
+            "base_quality": "detailed, sharp, high quality"
         },
         "status": "ready" if all_models_ready else "not_ready",
         "message": "모든 시스템 준비됨" if all_models_ready else "브릿지/ComfyUI 연결 확인 필요"
