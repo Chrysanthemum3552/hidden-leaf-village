@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # Env & Page Config
 # ----------------------------
 load_dotenv()
-BACKEND = os.getenv("BACKEND_URL", "https://hidden-leaf-village.onrender.com").rstrip("/")
+BACKEND = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 st.set_page_config(page_title="🖼️ 광고 이미지 생성", page_icon="🖼️", layout="wide")
 
