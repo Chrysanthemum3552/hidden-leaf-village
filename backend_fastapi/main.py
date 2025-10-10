@@ -1,110 +1,82 @@
+"""
+FastAPI Main Entry (Render 배포용)
+- ComfyUI와 Rosetta 서버는 ngrok으로 터널링
+- .env 파일을 통해 동적으로 ngrok URL을 읽어옴
+"""
+
 import os
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
-# ─────────────────────────────────────────
-# .env 로드 (프로젝트 루트의 .env 우선)
-# ─────────────────────────────────────────
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-env_path = PROJECT_ROOT / ".env"
-if env_path.exists():
-    load_dotenv(dotenv_path=env_path, override=True)
-else:
-    load_dotenv()
+# ----------------------------
+# 1. 환경 변수 로드 (.env)
+# ----------------------------
+load_dotenv()
 
-# ─────────────────────────────────────────
-# FastAPI 앱
-# ─────────────────────────────────────────
+# Render에서 호스팅되는 백엔드 주소
+BACKEND_URL = os.getenv("BACKEND_URL", "https://hidden-leaf-village.onrender.com").rstrip("/")
+
+# ngrok 터널링된 외부 서버 주소
+COMFYUI_URL = os.getenv("COMFYUI_URL", "").rstrip("/")
+TRANSLATION_BRIDGE_URL = os.getenv("TRANSLATION_BRIDGE_URL", "").rstrip("/")
+
+# 데이터 저장 루트 (uploads / outputs)
+STORAGE_ROOT = os.getenv("STORAGE_ROOT", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data")))
+
+# ----------------------------
+# 2. FastAPI 앱 설정
+# ----------------------------
 app = FastAPI(
     title="ad-gen-service",
-    description="(1) 메뉴판 생성 (2) 글→이미지 (3) 이미지→글",
+    description="소상공인을 위한 광고 콘텐츠 생성 서비스 (메뉴판 / 이미지 / 광고문구)",
     version="1.0.0",
 )
 
-# CORS (프론트엔드 접근 허용)
+# ----------------------------
+# 3. CORS 허용
+# ----------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # 배포 시에는 Render 도메인만 허용 가능
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ─────────────────────────────────────────
-# 저장소 경로 및 정적 파일 마운트
-# ─────────────────────────────────────────
-STORAGE_ROOT = os.getenv(
-    "STORAGE_ROOT",
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
-)
-for sub in ("uploads", "outputs"):
-    os.makedirs(os.path.join(STORAGE_ROOT, sub), exist_ok=True)
+# ----------------------------
+# 4. 라우터 등록
+# ----------------------------
+from routes import copy_from_image, image_from_copy, menu_service
 
-app.mount("/static", StaticFiles(directory=STORAGE_ROOT), name="static")
+app.include_router(copy_from_image.router, prefix="/generate", tags=["copy_from_image"])
+app.include_router(image_from_copy.router, prefix="/generate", tags=["image_from_copy"])
+app.include_router(menu_service.router, prefix="/generate", tags=["menu_service"])
 
-# 공개용 베이스 URL (Render에 환경변수로 설정 권장)
-BASE_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000")
 
-# ─────────────────────────────────────────
-# 라우터 등록
-# ─────────────────────────────────────────
-# image_from_copy 라우트는 원격 Rosetta/ComfyUI 호출 기반 (_get_pipeline)
-from routes.image_from_copy import router as image_from_copy_router, _get_pipeline
-from routes.copy_from_image import router as copy_from_image_router
-from routes.menu_service import router as menu_service_router
-
-app.include_router(image_from_copy_router, prefix="/generate", tags=["image-from-copy"])
-app.include_router(copy_from_image_router, prefix="/generate", tags=["copy-from-image"])
-app.include_router(menu_service_router,  prefix="/generate", tags=["menu-service"])
-
-# ─────────────────────────────────────────
-# 서버 시작 시 초기화
-# ─────────────────────────────────────────
-@app.on_event("startup")
-def preload_services():
-    """
-    서버 시작 시 원격 서비스 연결 여부만 가볍게 체크.
-    (ComfyUI / Rosetta 둘 다 Cloudflared 터널 통해 연결됨)
-    """
-    try:
-        pipeline = _get_pipeline()
-        pipeline.check_services()
-        print("✅ 원격 서비스 연결 확인 완료 (ComfyUI + Rosetta)")
-    except Exception as e:
-        print(f"⚠️ 원격 서비스 확인 실패 (무시 가능): {e}")
-
-# ─────────────────────────────────────────
-# 헬스체크 & 인덱스
-# ─────────────────────────────────────────
+# ----------------------------
+# 5. 헬스체크 & 연결 상태 확인
+# ----------------------------
 @app.get("/")
-def root():
+def health_check():
+    """
+    Render에 배포된 FastAPI 서버의 기본 루트.
+    ngrok으로 연결된 서버 주소를 함께 반환해줌.
+    """
     return {
         "ok": True,
-        "service": "ad-gen-service",
-        "static_example": f"{BASE_URL}/static/outputs/",
-        "endpoints": {
-            "image_from_copy": "/generate/image-from-copy",
-            "copy_from_image": "/generate/copy-from-image",
-            "menu_service": "/generate/menu-service"
-        }
-    }
-
-@app.get("/healthz")
-def healthz():
-    try:
-        test_path = Path(STORAGE_ROOT) / "outputs" / ".healthcheck"
-        test_path.write_text("ok", encoding="utf-8")
-        if test_path.exists():
-            test_path.unlink(missing_ok=True)
-        writable = True
-    except Exception:
-        writable = False
-
-    return {
-        "status": "ok",
+        "backend": BACKEND_URL,
+        "comfyui_tunnel": COMFYUI_URL,
+        "translation_tunnel": TRANSLATION_BRIDGE_URL,
         "storage_root": STORAGE_ROOT,
-        "writable": writable
     }
+
+# ----------------------------
+# 6. 서버 시작 메시지 (선택)
+# ----------------------------
+if __name__ == "__main__":
+    import uvicorn
+    print(f"✅ FastAPI started on {BACKEND_URL}")
+    print(f"🌉 ComfyUI via: {COMFYUI_URL}")
+    print(f"🈶 Translation via: {TRANSLATION_BRIDGE_URL}")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
