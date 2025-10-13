@@ -3,6 +3,8 @@ import os
 import requests
 import streamlit as st
 from dotenv import load_dotenv
+import shutil
+from pathlib import Path
 
 # ----------------------------
 # Env & Page Config
@@ -160,6 +162,9 @@ st.markdown("</div></div>", unsafe_allow_html=True)
 # ----------------------------
 # Action
 # ----------------------------
+import shutil
+from pathlib import Path
+
 if generate:
     if not text.strip():
         st.warning("광고 문구를 입력해주세요.")
@@ -186,8 +191,37 @@ if generate:
                 if not file_url or not file_url.startswith("http"):
                     st.error(f"이미지 URL이 없습니다. 응답: {data}")
                 else:
-                    st.success("완료! 🎉 생성된 이미지를 확인하세요.")
-                    st.image(file_url, use_container_width=True, caption="생성 결과")
+                    filename = Path(file_url).name
 
-                    # 디버깅용
-                    st.code(file_url)
+                    # ✅ 루트 절대경로 기준으로 설정
+                    # frontend_streamlit/main.py → ../../data/outputs
+                    ROOT_DIR = Path(__file__).resolve().parents[2]
+                    root_output = ROOT_DIR / "data" / "outputs" / filename
+                    backend_output = ROOT_DIR / "backend_fastapi" / "data" / "outputs" / filename
+
+                    found_path = None
+
+                    # 1️⃣ 루트 data/outputs 확인
+                    if root_output.exists():
+                        found_path = root_output
+                        st.info(f"✅ 루트 data/outputs에서 발견: {found_path}")
+                    # 2️⃣ backend_fastapi/data/outputs 확인 후 복사
+                    elif backend_output.exists():
+                        try:
+                            (ROOT_DIR / "data" / "outputs").mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(backend_output, root_output)
+                            found_path = root_output
+                            st.info(f"📂 backend_fastapi/data/outputs에서 복사 → data/outputs/")
+                        except Exception as e:
+                            st.error(f"복사 중 오류 발생: {e}")
+                    # 3️⃣ 둘 다 없음
+                    else:
+                        st.error(f"❌ 이미지 파일을 찾을 수 없습니다.\n검색 경로:\n{root_output}\n{backend_output}")
+
+                    # 표시
+                    if found_path and found_path.exists():
+                        st.success("완료! 🎉 생성된 이미지를 확인하세요.")
+                        st.image(str(found_path), use_container_width=True, caption="생성 결과")
+                        st.code(str(found_path))
+
+
