@@ -66,9 +66,14 @@ BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "http://localhost:8000").rs
 pip install -r requirements.txt
 python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-2. 새로운 터미널을 하나 더 열고 이번엔 frontend_streamlit 디렉터리로 이동 뒤 다음을 입력
+2. 두 번째 터미널을 열고 cd ComfyUI/ComfyUI 를 입력하고 python main.py입력
+
+3. 명령 프롬프트에 다음을 입력 ngrok http 8188
+
+4. 새로운 터미널을 하나 더 열고 이번엔 frontend_streamlit 디렉터리로 이동 뒤 다음을 입력
 pip install -r requirements.txt
 python -m streamlit run app.py --server.port 8501
+
 
 => pip install -r requirements.txt 이 코드는 최초 한 번만 해도 됩니당
 ```
@@ -78,3 +83,7 @@ python -m streamlit run app.py --server.port 8501
 # 4팀의 협업일지 링크
 
 https://www.notion.so/4-269e3ffbb6558064b8b6e24e43f1ac27?source=copy_link
+
+# 보고서 다운로드 링크
+
+https://drive.google.com/file/d/1dpWAKpo66nOjxrj7uM95amIxF_IcrlUH/view?usp=sharing
