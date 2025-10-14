@@ -5,8 +5,10 @@ FastAPI Main Entry (Render 배포용)
 """
 
 import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 # ----------------------------
@@ -22,7 +24,10 @@ COMFYUI_URL = os.getenv("COMFYUI_URL", "").rstrip("/")
 TRANSLATION_BRIDGE_URL = os.getenv("TRANSLATION_BRIDGE_URL", "").rstrip("/")
 
 # 데이터 저장 루트 (uploads / outputs)
-STORAGE_ROOT = os.getenv("STORAGE_ROOT", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data")))
+STORAGE_ROOT = os.getenv(
+    "STORAGE_ROOT",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+)
 
 # ----------------------------
 # 2. FastAPI 앱 설정
@@ -45,6 +50,17 @@ app.add_middleware(
 )
 
 # ----------------------------
+# ✅ 4-1. 정적 파일 경로 설정 (추가 부분)
+# ----------------------------
+ROOT_DIR = Path(__file__).resolve().parents[1]  # hidden-leaf-village/
+STATIC_DIR = ROOT_DIR / "static"
+OUTPUT_DIR = ROOT_DIR / "data" / "outputs"
+
+# /static → static/images, static/fonts 등
+app.mount("/static", StaticFiles(directory=ROOT_DIR / "data"), name="static")
+app.mount("/outputs", StaticFiles(directory=ROOT_DIR / "data" / "outputs"), name="outputs")
+
+# ----------------------------
 # 4. 라우터 등록
 # ----------------------------
 from routes import copy_from_image, image_from_copy, menu_service
@@ -52,7 +68,6 @@ from routes import copy_from_image, image_from_copy, menu_service
 app.include_router(copy_from_image.router, prefix="/generate", tags=["copy_from_image"])
 app.include_router(image_from_copy.router, prefix="/generate", tags=["image_from_copy"])
 app.include_router(menu_service.router, prefix="/generate", tags=["menu_service"])
-
 
 # ----------------------------
 # 5. 헬스체크 & 연결 상태 확인

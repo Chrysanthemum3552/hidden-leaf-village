@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
-import os, requests
+import os, requests, shutil
+from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
 # ----------------------------
 # 환경 변수 로드
 # ----------------------------
+load_dotenv()
 BACKEND = (
     os.getenv("BACKEND_URL")
     or os.getenv("BACKEND_PUBLIC_URL")
     or "https://hidden-leaf-village.onrender.com"
 ).rstrip("/")
-
 
 # ----------------------------
 # 페이지 기본 설정
@@ -116,11 +117,9 @@ st.markdown(
 # ----------------------------
 st.markdown('<div class="page"><div class="card">', unsafe_allow_html=True)
 
-# 도움말 토글 초기화
 if "show_help_menu" not in st.session_state:
     st.session_state["show_help_menu"] = False
 
-# 도움말 버튼
 if st.button("💡 도움말 보기", key="help_menu", use_container_width=False):
     st.session_state["show_help_menu"] = not st.session_state["show_help_menu"]
 
@@ -145,54 +144,32 @@ if st.session_state["show_help_menu"]:
         unsafe_allow_html=True,
     )
 
-# 가게명 / 테마 입력
 shop = st.text_input("가게명", value="My Cafe")
 theme = st.selectbox("테마", ["simple", "modern", "vintage", "neon", "korean"])
 
 st.subheader("메뉴 입력")
 
-# 초기 메뉴 아이템
 if "menu_items" not in st.session_state:
-    st.session_state["menu_items"] = [
-        {"name": "Americano", "price": 3000, "desc": "Hot/Iced"}
-    ]
+    st.session_state["menu_items"] = [{"name": "Americano", "price": 3000, "desc": "Hot/Iced"}]
 
 def render_items():
-    # enumerate 중간 삭제 안정성을 위해 인덱스 리스트 사용
     idxs = list(range(len(st.session_state["menu_items"])))
     for i in idxs:
         it = st.session_state["menu_items"][i]
         cols = st.columns([4, 2, 4, 1])
-        it["name"] = cols[0].text_input(
-            "이름",
-            value=it.get("name", ""),
-            key=f"name_{i}",
-            placeholder="새 메뉴 입력"
-        )
-        it["price"] = cols[1].number_input(
-            "가격",
-            value=int(it.get("price", 0) or 0),
-            step=100,
-            key=f"price_{i}"
-        )
-        it["desc"] = cols[2].text_input(
-            "설명(선택)",
-            value=it.get("desc", ""),
-            key=f"desc_{i}",
-            placeholder="예: Hot/Iced, 카페인/디카페인, 연하게/진하게 등등"
-        )
+        it["name"] = cols[0].text_input("이름", value=it.get("name", ""), key=f"name_{i}")
+        it["price"] = cols[1].number_input("가격", value=int(it.get("price", 0)), step=100, key=f"price_{i}")
+        it["desc"] = cols[2].text_input("설명(선택)", value=it.get("desc", ""), key=f"desc_{i}")
         if cols[3].button("삭제", key=f"del_{i}"):
             st.session_state["menu_items"].pop(i)
             st.rerun()
 
 render_items()
 
-# 메뉴 추가 버튼
 if st.button("➕ 메뉴 추가", use_container_width=True, type="secondary"):
     st.session_state["menu_items"].append({"name": "", "price": 0, "desc": ""})
     st.rerun()
 
-# 메뉴판 생성 버튼
 generate = st.button("✨ 메뉴판 생성", use_container_width=True, type="primary")
 
 st.markdown("</div></div>", unsafe_allow_html=True)
@@ -214,10 +191,7 @@ if generate:
 
             st.success("완료! 🎉 생성된 메뉴판을 확인하세요.")
 
-            # 다양한 키를 허용: image_url → url → file_url → path(상대경로) 순
             img_url = data.get("image_url") or data.get("url") or data.get("file_url")
-
-            # path만 준 경우(예: "/static/outputs/xxx.png") BACKEND와 합쳐서 절대 URL로
             if not img_url:
                 path = data.get("path")
                 if path:
@@ -226,8 +200,31 @@ if generate:
             if not img_url:
                 st.error(f"응답에 올바른 이미지 URL이 없습니다.\n{data}")
             else:
-                st.image(img_url, caption="생성된 메뉴판", use_container_width=True)
-                st.code(img_url)  # 디버깅용으로도 유용
+                filename = Path(img_url).name
+
+                # ✅ 루트 기준 탐색 & 복사 로직
+                ROOT_DIR = Path(__file__).resolve().parents[2]
+                root_output = ROOT_DIR / "data" / "outputs" / filename
+                backend_output = ROOT_DIR / "backend_fastapi" / "data" / "outputs" / filename
+                found_path = None
+
+                if root_output.exists():
+                    found_path = root_output
+                    st.info(f"✅ data/outputs에서 이미지 확인됨")
+                elif backend_output.exists():
+                    try:
+                        (ROOT_DIR / "data" / "outputs").mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(backend_output, root_output)
+                        found_path = root_output
+                        st.info("📂 backend_fastapi/data/outputs에서 복사 완료 → data/outputs/")
+                    except Exception as e:
+                        st.error(f"복사 중 오류 발생: {e}")
+                else:
+                    st.error(f"❌ 이미지 파일을 찾을 수 없습니다.\n{root_output}\n{backend_output}")
+
+                if found_path and found_path.exists():
+                    st.image(str(found_path), caption="생성된 메뉴판", use_container_width=True)
+                    st.code(str(found_path))
 
         except requests.RequestException as e:
             resp_text = ""
