@@ -91,7 +91,10 @@ def health_check():
 # ----------------------------
 if __name__ == "__main__":
     import uvicorn
-    print(f"✅ FastAPI started on {BACKEND_URL}")
+    port = int(os.environ.get("PORT", 8000))  # Render 환경에서 PORT 받아오기
+    print(f"✅ FastAPI started on port {port}")
     print(f"🌉 ComfyUI via: {COMFYUI_URL}")
     print(f"🈶 Translation via: {TRANSLATION_BRIDGE_URL}")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+
